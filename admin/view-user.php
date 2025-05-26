@@ -35,7 +35,48 @@ if (!$user) {
     exit;
 }
 
-// Get user's documents
+// Get user's documents with pagination support
+$page = isset($_GET['page']) ? intval($_GET['page']) : 1;
+$limit = isset($_GET['limit']) ? intval($_GET['limit']) : 10;
+$offset = ($page - 1) * $limit;
+
+// Apply filters if provided
+$whereClause = "WHERE UserID = ?";
+$filterParams = [$user_id];
+$filterTypes = "i";
+
+if (isset($_GET['status']) && $_GET['status'] != '') {
+    $status = $_GET['status'];
+    switch ($status) {
+        case 'active':
+            $whereClause .= " AND IsDeleted = 0 AND FlagReason IS NULL";
+            break;
+        case 'flagged':
+            $whereClause .= " AND IsDeleted = 1 AND FlagReason IS NOT NULL";
+            break;
+        case 'deleted':
+            $whereClause .= " AND IsDeleted = 1";
+            break;
+    }
+}
+
+if (isset($_GET['type']) && $_GET['type'] != '') {
+    $fileType = $_GET['type'];
+    $whereClause .= " AND FileType = ?";
+    $filterParams[] = $fileType;
+    $filterTypes .= "s";
+}
+
+// Get total document count for pagination
+$countSql = "SELECT COUNT(*) as total FROM document $whereClause";
+$countStmt = mysqli_prepare($conn, $countSql);
+mysqli_stmt_bind_param($countStmt, $filterTypes, ...$filterParams);
+mysqli_stmt_execute($countStmt);
+$countResult = mysqli_stmt_get_result($countStmt);
+$totalDocs = mysqli_fetch_assoc($countResult)['total'];
+$totalPages = ceil($totalDocs / $limit);
+
+// Get paginated documents
 $docSql = "SELECT 
     DocumentID,
     Title,
@@ -46,14 +87,21 @@ $docSql = "SELECT
         WHEN FlagReason IS NOT NULL AND FlagReason != '' THEN 'Flagged'
         ELSE 'Active'
     END as Status,
-    FileLocation
+    FileLocation,
+    IsDeleted,
+    FlagReason
 FROM document 
-WHERE UserID = ? 
+$whereClause 
 ORDER BY UploadDate DESC 
-LIMIT 10";
+LIMIT ?, ?";
+
+// Add limit and offset to params
+$filterParams[] = $offset;
+$filterParams[] = $limit;
+$filterTypes .= "ii";
 
 $docStmt = mysqli_prepare($conn, $docSql);
-mysqli_stmt_bind_param($docStmt, "i", $user_id);
+mysqli_stmt_bind_param($docStmt, $filterTypes, ...$filterParams);
 mysqli_stmt_execute($docStmt);
 $docResult = mysqli_stmt_get_result($docStmt);
 $userDocuments = [];
@@ -83,6 +131,28 @@ mysqli_stmt_execute($statsStmt);
 $statsResult = mysqli_stmt_get_result($statsStmt);
 $userStats = mysqli_fetch_assoc($statsResult);
 
+// Get user activity logs
+$activitySql = "SELECT 
+    f.LogID,
+    f.Timestamp,
+    d.Title as DocumentTitle,
+    a.AccessName as Action
+FROM fileaccesslog f
+LEFT JOIN document d ON f.DocumentID = d.DocumentID
+LEFT JOIN accesstype a ON f.AccessType = a.AccessTypeID
+WHERE f.UserID = ?
+ORDER BY f.Timestamp DESC
+LIMIT 5";
+
+$activityStmt = mysqli_prepare($conn, $activitySql);
+mysqli_stmt_bind_param($activityStmt, "i", $user_id);
+mysqli_stmt_execute($activityStmt);
+$activityResult = mysqli_stmt_get_result($activityStmt);
+$userActivity = [];
+while ($row = mysqli_fetch_assoc($activityResult)) {
+    $userActivity[] = $row;
+}
+
 // Function to format bytes
 function formatBytes($bytes, $precision = 2) {
     $units = array('B', 'KB', 'MB', 'GB', 'TB');
@@ -92,6 +162,27 @@ function formatBytes($bytes, $precision = 2) {
     }
     
     return round($bytes, $precision) . ' ' . $units[$i];
+}
+
+// Function to calculate how long ago a timestamp was
+function timeAgo($datetime) {
+    $now = new DateTime();
+    $ago = new DateTime($datetime);
+    $diff = $now->diff($ago);
+    
+    if ($diff->y > 0) {
+        return $diff->y . ' year' . ($diff->y > 1 ? 's' : '') . ' ago';
+    } elseif ($diff->m > 0) {
+        return $diff->m . ' month' . ($diff->m > 1 ? 's' : '') . ' ago';
+    } elseif ($diff->d > 0) {
+        return $diff->d . ' day' . ($diff->d > 1 ? 's' : '') . ' ago';
+    } elseif ($diff->h > 0) {
+        return $diff->h . ' hour' . ($diff->h > 1 ? 's' : '') . ' ago';
+    } elseif ($diff->i > 0) {
+        return $diff->i . ' minute' . ($diff->i > 1 ? 's' : '') . ' ago';
+    } else {
+        return 'Just now';
+    }
 }
 
 include 'include/header.php';
@@ -115,9 +206,36 @@ include 'include/admin-sidebar.php';
               </ol>
             </nav>
           </div>
+          <div class="col-12 col-xl-4">
+            <div class="justify-content-end d-flex">
+                <a href="edit-user.php?id=<?php echo $user_id; ?>" class="btn btn-primary mr-2">
+                    <i class="ti-pencil mr-1"></i> Edit User
+                </a>
+                <?php if ($user_id != $_SESSION['user_id']): ?>
+                <button class="btn btn-danger delete-user" 
+                        data-id="<?php echo $user_id; ?>" 
+                        data-name="<?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?>">
+                    <i class="ti-trash mr-1"></i> Delete User
+                </button>
+                <?php endif; ?>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+    
+    <?php
+    // Display messages
+    if (isset($_SESSION['error'])) {
+        echo '<div class="alert alert-danger" role="alert">' . htmlspecialchars($_SESSION['error']) . '</div>';
+        unset($_SESSION['error']);
+    }
+    
+    if (isset($_SESSION['success'])) {
+        echo '<div class="alert alert-success" role="alert">' . htmlspecialchars($_SESSION['success']) . '</div>';
+        unset($_SESSION['success']);
+    }
+    ?>
     
     <!-- User Info -->
     <div class="row">
@@ -134,7 +252,33 @@ include 'include/admin-sidebar.php';
               <?php endif; ?>
               <div class="mt-3">
                 <h4><?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?></h4>
-                <p class="text-muted font-weight-bold"><?php echo htmlspecialchars($user['Department'] ?? 'No Department'); ?></p>
+                <p class="text-muted font-weight-bold">User Profile</p>
+                <span class="badge <?php echo $user['UserRole'] == 'admin' ? 'badge-danger' : 'badge-primary'; ?> mb-2">
+                  <?php echo ucfirst($user['UserRole']); ?>
+                </span>
+              </div>
+            </div>
+            
+            <!-- User Stats -->
+            <div class="mt-4">
+              <h6 class="card-title mb-3">Document Statistics</h6>
+              <div class="template-demo">
+                <div class="d-flex justify-content-between mt-2">
+                  <small class="text-muted">Total Documents</small>
+                  <span class="badge badge-info"><?php echo $userStats['DocumentCount']; ?></span>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                  <small class="text-muted">Active Documents</small>
+                  <span class="badge badge-success"><?php echo $userStats['ActiveDocuments']; ?></span>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                  <small class="text-muted">Flagged Documents</small>
+                  <span class="badge badge-warning"><?php echo $userStats['FlaggedDocuments']; ?></span>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                  <small class="text-muted">Deleted Documents</small>
+                  <span class="badge badge-danger"><?php echo $userStats['DeletedDocuments']; ?></span>
+                </div>
               </div>
             </div>
           </div>
@@ -175,28 +319,108 @@ include 'include/admin-sidebar.php';
               <div class="col-md-6">
                 <div class="list-group list-group-flush">
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Department:</span>
-                    <span><?php echo htmlspecialchars($user['Department'] ?? 'Not Set'); ?></span>
-                  </div>
-                  <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                     <span class="font-weight-bold">Extension:</span>
                     <span><?php echo htmlspecialchars($user['Extension'] ?? 'Not Set'); ?></span>
                   </div>
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Total Documents:</span>
-                    <span class="badge badge-info"><?php echo $userStats['DocumentCount']; ?></span>
+                    <span class="font-weight-bold">Middle Name:</span>
+                    <span><?php echo htmlspecialchars($user['MiddleName'] ?? 'Not Set'); ?></span>
                   </div>
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Active Documents:</span>
-                    <span class="badge badge-success"><?php echo $userStats['ActiveDocuments']; ?></span>
+                    <span class="font-weight-bold">Status:</span>
+                    <span class="badge badge-success">Active</span>
                   </div>
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Flagged Documents:</span>
-                    <span class="badge badge-warning"><?php echo $userStats['FlaggedDocuments']; ?></span>
+                    <span class="font-weight-bold">Last Activity:</span>
+                    <span><?php echo !empty($userActivity) ? timeAgo($userActivity[0]['Timestamp']) : 'No activity'; ?></span>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Recent Activity -->
+    <div class="row">
+      <div class="col-md-12 grid-margin stretch-card">
+        <div class="card">
+          <div class="card-body">
+            <h4 class="card-title">Recent Activity</h4>
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Document</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php if (empty($userActivity)): ?>
+                    <tr>
+                      <td colspan="3" class="text-center">No activity found for this user</td>
+                    </tr>
+                  <?php else: ?>
+                    <?php foreach ($userActivity as $activity): ?>
+                      <tr>
+                        <td><?php echo timeAgo($activity['Timestamp']); ?></td>
+                        <td>
+                          <?php 
+                            $actionIcon = '';
+                            $actionClass = '';
+                            switch ($activity['Action']) {
+                              case 'Upload':
+                                $actionIcon = 'ti-upload';
+                                $actionClass = 'text-success';
+                                break;
+                              case 'Download':
+                                $actionIcon = 'ti-download';
+                                $actionClass = 'text-primary';
+                                break;
+                              case 'View':
+                                $actionIcon = 'ti-eye';
+                                $actionClass = 'text-info';
+                                break;
+                              case 'Delete':
+                                $actionIcon = 'ti-trash';
+                                $actionClass = 'text-danger';
+                                break;
+                              case 'Flag':
+                                $actionIcon = 'ti-flag-alt';
+                                $actionClass = 'text-warning';
+                                break;
+                              default:
+                                $actionIcon = 'ti-file';
+                                $actionClass = '';
+                            }
+                          ?>
+                          <i class="<?php echo $actionIcon; ?> <?php echo $actionClass; ?> mr-1"></i> 
+                          <?php echo htmlspecialchars($activity['Action']); ?>
+                        </td>
+                        <td>
+                          <?php if (!empty($activity['DocumentTitle'])): ?>
+                            <a href="view-document.php?id=<?php echo $activity['DocumentID']; ?>" class="text-dark">
+                              <?php echo htmlspecialchars($activity['DocumentTitle']); ?>
+                            </a>
+                          <?php else: ?>
+                            <span class="text-muted">Deleted document</span>
+                          <?php endif; ?>
+                        </td>
+                      </tr>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
+                </tbody>
+              </table>
+            </div>
+            <?php if (!empty($userActivity)): ?>
+              <div class="text-center mt-3">
+                <a href="user-activity.php?id=<?php echo $user_id; ?>" class="btn btn-outline-primary btn-sm">
+                  View All Activity
+                </a>
+              </div>
+            <?php endif; ?>
           </div>
         </div>
       </div>
@@ -207,7 +431,30 @@ include 'include/admin-sidebar.php';
       <div class="col-md-12 grid-margin stretch-card">
         <div class="card">
           <div class="card-body">
-            <h4 class="card-title">User Documents (<?php echo count($userDocuments); ?> recent)</h4>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <h4 class="card-title mb-0">User Documents (<?php echo $totalDocs; ?> total)</h4>
+              
+              <!-- Document filters -->
+              <div class="d-flex">
+                <div class="mr-2">
+                  <select class="form-control form-control-sm" id="document-type-filter">
+                    <option value="">All Types</option>
+                    <option value="pdf" <?php echo isset($_GET['type']) && $_GET['type'] == 'pdf' ? 'selected' : ''; ?>>PDF</option>
+                    <option value="jpg" <?php echo isset($_GET['type']) && $_GET['type'] == 'jpg' ? 'selected' : ''; ?>>JPG</option>
+                    <option value="png" <?php echo isset($_GET['type']) && $_GET['type'] == 'png' ? 'selected' : ''; ?>>PNG</option>
+                  </select>
+                </div>
+                <div>
+                  <select class="form-control form-control-sm" id="document-status-filter">
+                    <option value="">All Status</option>
+                    <option value="active" <?php echo isset($_GET['status']) && $_GET['status'] == 'active' ? 'selected' : ''; ?>>Active</option>
+                    <option value="flagged" <?php echo isset($_GET['status']) && $_GET['status'] == 'flagged' ? 'selected' : ''; ?>>Flagged</option>
+                    <option value="deleted" <?php echo isset($_GET['status']) && $_GET['status'] == 'deleted' ? 'selected' : ''; ?>>Deleted</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            
             <div class="table-responsive">
               <table class="table table-hover">
                 <thead>
@@ -221,7 +468,11 @@ include 'include/admin-sidebar.php';
                   </tr>
                 </thead>
                 <tbody>
-                  <?php if (!empty($userDocuments)): ?>
+                  <?php if (empty($userDocuments)): ?>
+                    <tr>
+                      <td colspan="6" class="text-center text-muted">No documents found</td>
+                    </tr>
+                  <?php else: ?>
                     <?php foreach ($userDocuments as $doc): ?>
                       <?php
                       $statusClass = '';
@@ -251,21 +502,77 @@ include 'include/admin-sidebar.php';
                             <a href="../public/download.php?id=<?php echo $doc['DocumentID']; ?>" class="btn btn-success btn-sm" title="Download">
                               <i class="ti-download"></i>
                             </a>
+                          <?php elseif ($doc['Status'] == 'Deleted' || $doc['Status'] == 'Flagged'): ?>
+                            <a href="process-unflag-document.php?id=<?php echo $doc['DocumentID']; ?>" class="btn btn-warning btn-sm" title="Restore">
+                              <i class="ti-reload"></i>
+                            </a>
                           <?php endif; ?>
                         </td>
                       </tr>
                     <?php endforeach; ?>
-                  <?php else: ?>
-                    <tr>
-                      <td colspan="6" class="text-center text-muted">No documents found</td>
-                    </tr>
                   <?php endif; ?>
                 </tbody>
               </table>
             </div>
-            <?php if (count($userDocuments) >= 10): ?>
+            
+            <!-- Pagination -->
+            <?php if ($totalPages > 1): ?>
+            <div class="mt-4 d-flex justify-content-between align-items-center">
+              <div>
+                Showing <?php echo $offset + 1; ?> to <?php echo min($offset + $limit, $totalDocs); ?> of <?php echo $totalDocs; ?> documents
+              </div>
+              <ul class="pagination">
+                <?php if ($page > 1): ?>
+                <li class="page-item">
+                  <a class="page-link" href="?id=<?php echo $user_id; ?>&page=<?php echo $page - 1; ?>&limit=<?php echo $limit; ?><?php echo isset($_GET['type']) ? '&type=' . $_GET['type'] : ''; ?><?php echo isset($_GET['status']) ? '&status=' . $_GET['status'] : ''; ?>">Previous</a>
+                </li>
+                <?php else: ?>
+                <li class="page-item disabled">
+                  <a class="page-link" href="#">Previous</a>
+                </li>
+                <?php endif; ?>
+                
+                <?php
+                // Display pagination links
+                $startPage = max(1, $page - 2);
+                $endPage = min($totalPages, $page + 2);
+                
+                if ($startPage > 1) {
+                    echo '<li class="page-item"><a class="page-link" href="?id=' . $user_id . '&page=1&limit=' . $limit . (isset($_GET['type']) ? '&type=' . $_GET['type'] : '') . (isset($_GET['status']) ? '&status=' . $_GET['status'] : '') . '">1</a></li>';
+                    if ($startPage > 2) {
+                        echo '<li class="page-item disabled"><a class="page-link" href="#">...</a></li>';
+                    }
+                }
+                
+                for ($i = $startPage; $i <= $endPage; $i++) {
+                    $activeClass = $i == $page ? 'active' : '';
+                    echo '<li class="page-item ' . $activeClass . '"><a class="page-link" href="?id=' . $user_id . '&page=' . $i . '&limit=' . $limit . (isset($_GET['type']) ? '&type=' . $_GET['type'] : '') . (isset($_GET['status']) ? '&status=' . $_GET['status'] : '') . '">' . $i . '</a></li>';
+                }
+                
+                if ($endPage < $totalPages) {
+                    if ($endPage < $totalPages - 1) {
+                        echo '<li class="page-item disabled"><a class="page-link" href="#">...</a></li>';
+                    }
+                    echo '<li class="page-item"><a class="page-link" href="?id=' . $user_id . '&page=' . $totalPages . '&limit=' . $limit . (isset($_GET['type']) ? '&type=' . $_GET['type'] : '') . (isset($_GET['status']) ? '&status=' . $_GET['status'] : '') . '">' . $totalPages . '</a></li>';
+                }
+                ?>
+                
+                <?php if ($page < $totalPages): ?>
+                <li class="page-item">
+                  <a class="page-link" href="?id=<?php echo $user_id; ?>&page=<?php echo $page + 1; ?>&limit=<?php echo $limit; ?><?php echo isset($_GET['type']) ? '&type=' . $_GET['type'] : ''; ?><?php echo isset($_GET['status']) ? '&status=' . $_GET['status'] : ''; ?>">Next</a>
+                </li>
+                <?php else: ?>
+                <li class="page-item disabled">
+                  <a class="page-link" href="#">Next</a>
+                </li>
+                <?php endif; ?>
+              </ul>
+            </div>
+            <?php endif; ?>
+            
+            <?php if (count($userDocuments) > 0): ?>
               <div class="text-center mt-4">
-                <a href="manage-documents.php?user_id=<?php echo $user_id; ?>" class="btn btn-primary">View All Documents</a>
+                <a href="manage-documents.php?user_id=<?php echo $user_id; ?>" class="btn btn-primary">Manage All Documents</a>
               </div>
             <?php endif; ?>
           </div>
@@ -273,6 +580,118 @@ include 'include/admin-sidebar.php';
       </div>
     </div>
   </div>
+
+  <!-- Delete User Confirmation Modal -->
+  <div class="modal fade" id="deleteUserModal" tabindex="-1" role="dialog" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="deleteUserModalLabel">Delete User</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete the user <strong id="delete-user-name"></strong>?</p>
+          <p class="text-danger">This action cannot be undone!</p>
+          
+          <div class="form-group mt-4">
+            <label for="document-action">What would you like to do with this user's documents?</label>
+            <select class="form-control" id="document-action" name="document-action">
+              <option value="reassign">Reassign to admin (recommended)</option>
+              <option value="orphan">Remove user association</option>
+              <option value="delete">Delete all documents</option>
+            </select>
+            <small class="form-text text-muted">
+              <strong>Reassign:</strong> Transfer ownership to admin account<br>
+              <strong>Remove association:</strong> Keep documents but remove ownership<br>
+              <strong>Delete:</strong> Permanently delete all user documents
+            </small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" id="confirm-delete">Delete User</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+$(document).ready(function() {
+    // Apply filters when changed
+    $('#document-type-filter, #document-status-filter').on('change', function() {
+        const type = $('#document-type-filter').val();
+        const status = $('#document-status-filter').val();
+        
+        // Construct URL with filters
+        let url = 'view-user.php?id=<?php echo $user_id; ?>';
+        if (type) url += '&type=' + type;
+        if (status) url += '&status=' + status;
+        
+        // Redirect to filtered view
+        window.location.href = url;
+    });
+    
+    // Delete user confirmation
+    $('.delete-user').on('click', function() {
+        const userId = $(this).data('id');
+        const userName = $(this).data('name');
+        
+        $('#delete-user-name').text(userName);
+        $('#deleteUserModal').modal('show');
+    });
+    
+    $('#confirm-delete').on('click', function() {
+        const userId = $('.delete-user').data('id');
+        const documentAction = $('#document-action').val();
+        
+        if (!userId) {
+            alert('Error: Could not determine which user to delete.');
+            return;
+        }
+        
+        // Show loading state
+        $(this).prop('disabled', true).html('<i class="ti-reload fa-spin"></i> Deleting...');
+        
+        $.ajax({
+            url: 'process-delete-user.php',
+            type: 'POST',
+            data: { 
+                userId: userId,
+                documentAction: documentAction
+            },
+            success: function(response) {
+                if (response.trim() === 'success') {
+                    // Redirect to user management page with success message
+                    window.location.href = 'manage-users.php?success=User+deleted+successfully';
+                } else {
+                    // Show error with details
+                    $('#deleteUserModal').modal('hide');
+                    $('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                        'Error deleting user: ' + response +
+                        '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+                        '<span aria-hidden="true">&times;</span></button></div>')
+                        .insertAfter('.grid-margin');
+                }
+            },
+            error: function(xhr, status, error) {
+                // Show detailed error message
+                $('#deleteUserModal').modal('hide');
+                $('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                    'Error: ' + status + ' - ' + error +
+                    '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+                    '<span aria-hidden="true">&times;</span></button></div>')
+                    .insertAfter('.grid-margin');
+            },
+            complete: function() {
+                // Reset button state
+                $('#confirm-delete').prop('disabled', false).html('Delete User');
+            }
+        });
+    });
+});
+</script>
 
 <?php
 include 'include/footer.php';

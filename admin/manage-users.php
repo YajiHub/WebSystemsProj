@@ -12,8 +12,6 @@ $sql = "SELECT
     u.LastName,
     u.EmailAddress,
     u.UserRole,
-    u.Status,
-    u.Department,
     u.Extension,
     a.LevelName,
     a.AccessLevelID
@@ -52,6 +50,12 @@ include 'include/admin-sidebar.php';
 .btn:disabled {
     opacity: 0.6;
 }
+.user-count-update {
+    transition: background-color 0.5s ease;
+}
+.flash-highlight {
+    background-color: #e8f4fe;
+}
 </style>
 
 <!-- Debug info (remove in production) -->
@@ -70,7 +74,14 @@ include 'include/admin-sidebar.php';
         <div class="row">
           <div class="col-12 col-xl-8 mb-4 mb-xl-0">
             <h3 class="font-weight-bold">User Management</h3>
-            <h6 class="font-weight-normal mb-0">Manage all registered users (<?php echo count($users); ?> total)</h6>
+            <h6 class="font-weight-normal mb-0 user-count-update">Manage all registered users (<span id="user-count"><?php echo count($users); ?></span> total)</h6>
+          </div>
+          <div class="col-12 col-xl-4">
+            <div class="justify-content-end d-flex">
+              <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addUserModal">
+                <i class="ti-user mr-1"></i> Add New User
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -115,6 +126,7 @@ include 'include/admin-sidebar.php';
                   <input type="text" class="form-control" id="search-input" placeholder="Search users...">
                   <div class="input-group-append">
                     <button class="btn btn-primary" id="search-btn" type="button">Search</button>
+                    <button class="btn btn-secondary" id="clear-filters" type="button">Clear</button>
                   </div>
                 </div>
               </div>
@@ -148,7 +160,7 @@ include 'include/admin-sidebar.php';
                     </tr>
                   <?php else: ?>
                     <?php foreach ($users as $user): ?>
-                      <tr>
+                      <tr data-user-id="<?php echo $user['UserID']; ?>">
                         <td><?php echo $user['UserID']; ?></td>
                         <td><?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?></td>
                         <td><?php echo htmlspecialchars($user['EmailAddress']); ?></td>
@@ -162,10 +174,18 @@ include 'include/admin-sidebar.php';
                           <a href="view-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-info btn-sm" title="View User">
                             <i class="ti-eye"></i>
                           </a>
+                          <a href="edit-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-primary btn-sm" title="Edit User">
+                            <i class="ti-pencil"></i>
+                          </a>
                           <?php if ($user['UserID'] != $_SESSION['user_id']): ?>
                             <button type="button" class="btn btn-danger btn-sm delete-user" 
                                     data-id="<?php echo $user['UserID']; ?>" 
+                                    data-name="<?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?>"
                                     title="Delete User">
+                              <i class="ti-trash"></i>
+                            </button>
+                          <?php else: ?>
+                            <button type="button" class="btn btn-secondary btn-sm" disabled title="You cannot delete your own account">
                               <i class="ti-trash"></i>
                             </button>
                           <?php endif; ?>
@@ -176,7 +196,167 @@ include 'include/admin-sidebar.php';
                 </tbody>
               </table>
             </div>
+            
+            <!-- Pagination for user table -->
+            <div class="mt-4 d-flex justify-content-between align-items-center">
+              <div class="dataTables_info" id="users-table_info" role="status" aria-live="polite">
+                Showing <span id="showing-start">1</span> to <span id="showing-end"><?php echo min(10, count($users)); ?></span> of <span id="total-entries"><?php echo count($users); ?></span> entries
+              </div>
+              <div class="dataTables_paginate paging_simple_numbers" id="users-table_paginate">
+                <ul class="pagination">
+                  <li class="paginate_button page-item previous disabled" id="users-table_previous">
+                    <a href="#" aria-controls="users-table" data-dt-idx="0" tabindex="0" class="page-link">Previous</a>
+                  </li>
+                  <li class="paginate_button page-item active">
+                    <a href="#" aria-controls="users-table" data-dt-idx="1" tabindex="0" class="page-link">1</a>
+                  </li>
+                  <li class="paginate_button page-item next disabled" id="users-table_next">
+                    <a href="#" aria-controls="users-table" data-dt-idx="2" tabindex="0" class="page-link">Next</a>
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete User Confirmation Modal -->
+  <div class="modal fade" id="deleteUserModal" tabindex="-1" role="dialog" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="deleteUserModalLabel">Delete User</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete the user <strong id="delete-user-name"></strong>?</p>
+          <p class="text-danger">This action cannot be undone!</p>
+          
+          <div class="form-group mt-4">
+            <label for="document-action">What would you like to do with this user's documents?</label>
+            <select class="form-control" id="document-action" name="document-action">
+              <option value="reassign">Reassign to admin (recommended)</option>
+              <option value="orphan">Remove user association</option>
+              <option value="delete">Delete all documents</option>
+            </select>
+            <small class="form-text text-muted">
+              <strong>Reassign:</strong> Transfer ownership to admin account<br>
+              <strong>Remove association:</strong> Keep documents but remove ownership<br>
+              <strong>Delete:</strong> Permanently delete all user documents
+            </small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" id="confirm-delete">Delete User</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add User Modal -->
+  <div class="modal fade" id="addUserModal" tabindex="-1" role="dialog" aria-labelledby="addUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="addUserModalLabel">Add New User</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="addUserForm" action="process-add-user.php" method="post">
+            <div class="row">
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label for="firstName">First Name <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control" id="firstName" name="firstName" required>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label for="middleName">Middle Name</label>
+                  <input type="text" class="form-control" id="middleName" name="middleName">
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label for="lastName">Last Name <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control" id="lastName" name="lastName" required>
+                </div>
+              </div>
+            </div>
+            
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="email">Email <span class="text-danger">*</span></label>
+                  <input type="email" class="form-control" id="email" name="email" required>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="username">Username <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control" id="username" name="username" required>
+                </div>
+              </div>
+            </div>
+            
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="password">Password <span class="text-danger">*</span></label>
+                  <input type="password" class="form-control" id="password" name="password" required>
+                  <small class="form-text text-muted">Minimum 6 characters</small>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="confirmPassword">Confirm Password <span class="text-danger">*</span></label>
+                  <input type="password" class="form-control" id="confirmPassword" name="confirmPassword" required>
+                </div>
+              </div>
+            </div>
+            
+            <div class="row">
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label for="role">Role <span class="text-danger">*</span></label>
+                  <select class="form-control" id="role" name="role" required>
+                    <option value="user">Regular User</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label for="accessLevel">Access Level <span class="text-danger">*</span></label>
+                  <select class="form-control" id="accessLevel" name="accessLevel" required>
+                    <?php foreach ($accessLevels as $level): ?>
+                      <option value="<?php echo $level['AccessLevelID']; ?>">
+                        <?php echo htmlspecialchars($level['LevelName']); ?>
+                      </option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-group">
+                  <label for="extension">Extension</label>
+                  <input type="text" class="form-control" id="extension" name="extension">
+                </div>
+              </div>
+            </div>
+            
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Add User</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -184,43 +364,115 @@ include 'include/admin-sidebar.php';
 
 <script>
 $(document).ready(function() {
-    // Delete user with improved error handling
-    $(document).on('click', '.delete-user', function() {
-        var userId = $(this).data('id');
-        var userName = $(this).closest('tr').find('td:nth-child(2)').text();
+    // Form validation for add user
+    $('#addUserForm').on('submit', function(e) {
+        const password = $('#password').val();
+        const confirmPassword = $('#confirmPassword').val();
         
-        if (confirm('Are you sure you want to delete user "' + userName + '"? This action cannot be undone.')) {
-            // Show loading state
-            $(this).prop('disabled', true).html('<i class="ti-reload"></i>');
-            
-            $.ajax({
-                url: 'process-delete-user.php',
-                type: 'POST',
-                data: { userId: userId },
-                success: function(response) {
-                    console.log('Delete response:', response);
-                    if (response.trim() === 'success') {
-                        // Remove the row from table
-                        $('button[data-id="' + userId + '"]').closest('tr').fadeOut(function() {
-                            $(this).remove();
-                            // Update user count
-                            var currentCount = parseInt($('.font-weight-normal').text().match(/\d+/)[0]);
-                            $('.font-weight-normal').text('Manage all registered users (' + (currentCount - 1) + ' total)');
-                        });
-                    } else {
-                        alert('Error deleting user: ' + response);
-                        // Reset button
-                        $('button[data-id="' + userId + '"]').prop('disabled', false).html('<i class="ti-trash"></i>');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('AJAX Error:', error);
-                    alert('Error deleting user. Please try again.');
-                    // Reset button
-                    $('button[data-id="' + userId + '"]').prop('disabled', false).html('<i class="ti-trash"></i>');
-                }
-            });
+        if (password !== confirmPassword) {
+            e.preventDefault();
+            alert('Passwords do not match!');
+            return false;
         }
+        
+        if (password.length < 6) {
+            e.preventDefault();
+            alert('Password must be at least 6 characters long!');
+            return false;
+        }
+        
+        return true;
+    });
+    
+    // Delete user with improved error handling
+    $('#deleteUserModal').on('show.bs.modal', function(e) {
+        const button = $(e.relatedTarget);
+        const userId = button.data('id');
+        const userName = button.data('name');
+        
+        $('#delete-user-name').text(userName);
+        
+        // Reset dropdown to default option
+        $('#document-action').val('reassign');
+    });
+    
+    $('#confirm-delete').on('click', function() {
+        const userId = $('.delete-user[data-id]:visible').data('id');
+        const documentAction = $('#document-action').val();
+        
+        if (!userId) {
+            alert('Error: Could not determine which user to delete.');
+            return;
+        }
+        
+        // Show loading state
+        $(this).prop('disabled', true).html('<i class="ti-reload fa-spin"></i> Deleting...');
+        
+        $.ajax({
+            url: 'process-delete-user.php',
+            type: 'POST',
+            data: { 
+                userId: userId,
+                documentAction: documentAction
+            },
+            success: function(response) {
+                if (response.trim() === 'success') {
+                    // Add animation to show deletion
+                    $('tr[data-user-id="' + userId + '"]').fadeOut(500, function() {
+                        $(this).remove();
+                        
+                        // Update user count with animation
+                        const currentCount = parseInt($('#user-count').text());
+                        $('#user-count').text(currentCount - 1);
+                        $('.user-count-update').addClass('flash-highlight');
+                        setTimeout(function() {
+                            $('.user-count-update').removeClass('flash-highlight');
+                        }, 1500);
+                        
+                        // Show success notification
+                        $('<div class="alert alert-success alert-dismissible fade show" role="alert">' +
+                            'User deleted successfully!' +
+                            '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+                            '<span aria-hidden="true">&times;</span></button></div>')
+                            .insertAfter('.grid-margin').delay(3000).fadeOut(function() {
+                                $(this).remove();
+                            });
+                        
+                        // Update pagination info
+                        updatePaginationInfo();
+                        
+                        // Check if table is now empty
+                        if ($('#users-table tbody tr').length === 0) {
+                            $('#users-table tbody').html('<tr><td colspan="6" class="text-center">No users found.</td></tr>');
+                        }
+                    });
+                    
+                    // Close modal
+                    $('#deleteUserModal').modal('hide');
+                } else {
+                    // Show error with details
+                    $('#deleteUserModal').modal('hide');
+                    $('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                        'Error deleting user: ' + response +
+                        '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+                        '<span aria-hidden="true">&times;</span></button></div>')
+                        .insertAfter('.grid-margin');
+                }
+            },
+            error: function(xhr, status, error) {
+                // Show detailed error message
+                $('#deleteUserModal').modal('hide');
+                $('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                    'Error: ' + status + ' - ' + error +
+                    '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
+                    '<span aria-hidden="true">&times;</span></button></div>')
+                    .insertAfter('.grid-margin');
+            },
+            complete: function() {
+                // Reset button state
+                $('#confirm-delete').prop('disabled', false).html('Delete User');
+            }
+        });
     });
     
     // Enhanced filter functionality
@@ -236,12 +488,9 @@ $(document).ready(function() {
         if (e.keyCode === 13) { // Enter key
             filterTable();
         }
-        // Also filter on every keystroke for better UX
-        filterTable();
     });
     
-    // Clear filters button (optional)
-    $('<button class="btn btn-secondary ml-2" id="clear-filters">Clear</button>').insertAfter('#search-btn');
+    // Clear filters button
     $('#clear-filters').on('click', function() {
         $('#role-filter').val('');
         $('#access-level-filter').val('');
@@ -253,8 +502,6 @@ $(document).ready(function() {
         var roleFilter = $('#role-filter').val().toLowerCase();
         var accessLevelFilter = $('#access-level-filter').val().toLowerCase();
         var searchText = $('#search-input').val().toLowerCase();
-        
-        console.log('Filtering with:', { role: roleFilter, accessLevel: accessLevelFilter, search: searchText });
         
         var visibleRows = 0;
         
@@ -301,7 +548,49 @@ $(document).ready(function() {
             noResultsRow.hide();
         }
         
-        console.log('Visible rows:', visibleRows);
+        // Update pagination info
+        updatePaginationInfo();
+    }
+    
+    // Initialize DataTable with improved options
+    var table = $('#users-table').DataTable({
+        "pageLength": 10,
+        "lengthMenu": [10, 25, 50, 100],
+        "searching": true,
+        "ordering": true,
+        "paging": true,
+        "info": true,
+        "language": {
+            "search": "Search:",
+            "lengthMenu": "Show _MENU_ entries per page",
+            "info": "Showing _START_ to _END_ of _TOTAL_ entries",
+            "infoEmpty": "Showing 0 to 0 of 0 entries",
+            "infoFiltered": "(filtered from _MAX_ total entries)",
+            "zeroRecords": "No matching records found",
+            "paginate": {
+                "first": "First",
+                "last": "Last",
+                "next": "Next",
+                "previous": "Previous"
+            }
+        }
+    });
+    
+    // Update pagination information
+    function updatePaginationInfo() {
+        const visibleRows = $('#users-table tbody tr:visible').length;
+        const noResultsRow = $('#users-table tbody tr.no-results:visible').length;
+        const actualVisibleRows = visibleRows - noResultsRow;
+        
+        if (actualVisibleRows <= 0) {
+            $('#showing-start').text('0');
+            $('#showing-end').text('0');
+            $('#total-entries').text('0');
+        } else {
+            $('#showing-start').text('1');
+            $('#showing-end').text(Math.min(10, actualVisibleRows));
+            $('#total-entries').text(actualVisibleRows);
+        }
     }
 });
 </script>
