@@ -1,16 +1,43 @@
 <?php
 // File: admin/manage-users.php
-// Include session management
 require_once '../public/include/session.php';
 
-// Require admin
+// Require admin login
 requireAdmin();
 
-// Get all users
-$users = getAllUsers($conn);
+// Get all users with access level information
+$sql = "SELECT 
+    u.UserID,
+    u.FirstName,
+    u.LastName,
+    u.EmailAddress,
+    u.UserRole,
+    u.Status,
+    u.Department,
+    u.Extension,
+    a.LevelName,
+    a.AccessLevelID
+FROM user u
+LEFT JOIN accesslevel a ON u.AccessLevel = a.AccessLevelID
+ORDER BY u.UserID DESC";
 
-// Get access levels for the form
-$accessLevels = getAllAccessLevels($conn);
+$result = mysqli_query($conn, $sql);
+$users = [];
+if ($result) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $users[] = $row;
+    }
+}
+
+// Get access levels for filtering
+$accessLevels = [];
+$sql = "SELECT * FROM accesslevel ORDER BY AccessLevelID";
+$result = mysqli_query($conn, $sql);
+if ($result) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $accessLevels[] = $row;
+    }
+}
 
 include 'include/header.php';
 include 'include/admin-sidebar.php';
@@ -18,6 +45,24 @@ include 'include/admin-sidebar.php';
 
 <!-- Main Panel -->
 <div class="main-panel">
+<style>
+.no-results {
+    font-style: italic;
+}
+.btn:disabled {
+    opacity: 0.6;
+}
+</style>
+
+<!-- Debug info (remove in production) -->
+<?php if (isset($_GET['debug'])): ?>
+<div class="alert alert-info">
+    <strong>Debug Info:</strong><br>
+    Total users loaded: <?php echo count($users); ?><br>
+    Access levels available: <?php echo count($accessLevels); ?><br>
+    Current user ID: <?php echo $_SESSION['user_id']; ?>
+</div>
+<?php endif; ?>
   <div class="content-wrapper">
     <!-- Page Title -->
     <div class="row">
@@ -25,27 +70,19 @@ include 'include/admin-sidebar.php';
         <div class="row">
           <div class="col-12 col-xl-8 mb-4 mb-xl-0">
             <h3 class="font-weight-bold">User Management</h3>
-            <h6 class="font-weight-normal mb-0">Manage all registered users</h6>
-          </div>
-          <div class="col-12 col-xl-4">
-            <div class="justify-content-end d-flex">
-              <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addUserModal">
-                <i class="ti-user mr-1"></i> Add New User
-              </button>
-            </div>
+            <h6 class="font-weight-normal mb-0">Manage all registered users (<?php echo count($users); ?> total)</h6>
           </div>
         </div>
       </div>
     </div>
     
     <?php
-    // Display error message if any
+    // Display messages
     if (isset($_SESSION['error'])) {
         echo '<div class="alert alert-danger" role="alert">' . htmlspecialchars($_SESSION['error']) . '</div>';
         unset($_SESSION['error']);
     }
     
-    // Display success message if any
     if (isset($_SESSION['success'])) {
         echo '<div class="alert alert-success" role="alert">' . htmlspecialchars($_SESSION['success']) . '</div>';
         unset($_SESSION['success']);
@@ -69,7 +106,7 @@ include 'include/admin-sidebar.php';
                 <select class="form-control" id="access-level-filter">
                   <option value="">All Access Levels</option>
                   <?php foreach ($accessLevels as $level): ?>
-                    <option value="<?php echo $level['LevelName']; ?>"><?php echo htmlspecialchars($level['LevelName']); ?></option>
+                    <option value="<?php echo htmlspecialchars($level['LevelName']); ?>"><?php echo htmlspecialchars($level['LevelName']); ?></option>
                   <?php endforeach; ?>
                 </select>
               </div>
@@ -115,19 +152,22 @@ include 'include/admin-sidebar.php';
                         <td><?php echo $user['UserID']; ?></td>
                         <td><?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?></td>
                         <td><?php echo htmlspecialchars($user['EmailAddress']); ?></td>
-                        <td><?php echo ucfirst($user['UserRole']); ?></td>
-                        <td><?php echo htmlspecialchars($user['LevelName']); ?></td>
+                        <td>
+                          <span class="badge <?php echo $user['UserRole'] == 'admin' ? 'badge-danger' : 'badge-primary'; ?>">
+                            <?php echo ucfirst($user['UserRole']); ?>
+                          </span>
+                        </td>
+                        <td><?php echo htmlspecialchars($user['LevelName'] ?? 'Not Set'); ?></td>
                         <td>
                           <a href="view-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-info btn-sm" title="View User">
                             <i class="ti-eye"></i>
                           </a>
-                          <a href="edit-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-primary btn-sm" title="Edit User">
-                            <i class="ti-pencil"></i>
-                          </a>
-                          <?php if ($user['UserID'] != $_SESSION['user_id']): // Don't allow deactivating self ?>
-                          <button type="button" class="btn btn-warning btn-sm toggle-status" data-id="<?php echo $user['UserID']; ?>" title="Deactivate User">
-                            <i class="ti-control-pause"></i>
-                          </button>
+                          <?php if ($user['UserID'] != $_SESSION['user_id']): ?>
+                            <button type="button" class="btn btn-danger btn-sm delete-user" 
+                                    data-id="<?php echo $user['UserID']; ?>" 
+                                    title="Delete User">
+                              <i class="ti-trash"></i>
+                            </button>
                           <?php endif; ?>
                         </td>
                       </tr>
@@ -136,147 +176,134 @@ include 'include/admin-sidebar.php';
                 </tbody>
               </table>
             </div>
-            
-            <?php if (!empty($users) && count($users) > 10): ?>
-            <!-- Pagination -->
-            <div class="mt-4">
-              <nav>
-                <ul class="pagination justify-content-center">
-                  <li class="page-item disabled">
-                    <a class="page-link" href="#" tabindex="-1">Previous</a>
-                  </li>
-                  <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                  <li class="page-item"><a class="page-link" href="#">2</a></li>
-                  <li class="page-item"><a class="page-link" href="#">3</a></li>
-                  <li class="page-item">
-                    <a class="page-link" href="#">Next</a>
-                  </li>
-                </ul>
-              </nav>
-            </div>
-            <?php endif; ?>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Add User Modal -->
-  <div class="modal fade" id="addUserModal" tabindex="-1" role="dialog" aria-labelledby="addUserModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="addUserModalLabel">Add New User</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </div>
-        <div class="modal-body">
-          <form id="addUserForm" action="process-add-user.php" method="post">
-            <div class="form-group">
-              <label for="firstName">First Name</label>
-              <input type="text" class="form-control" id="firstName" name="firstName" required>
-            </div>
-            <div class="form-group">
-              <label for="middleName">Middle Name (Optional)</label>
-              <input type="text" class="form-control" id="middleName" name="middleName">
-            </div>
-            <div class="form-group">
-              <label for="lastName">Last Name</label>
-              <input type="text" class="form-control" id="lastName" name="lastName" required>
-            </div>
-            <div class="form-group">
-              <label for="email">Email</label>
-              <input type="email" class="form-control" id="email" name="email" required>
-            </div>
-            <div class="form-group">
-              <label for="username">Username</label>
-              <input type="text" class="form-control" id="username" name="username" required>
-            </div>
-            <div class="form-group">
-              <label for="password">Password</label>
-              <input type="password" class="form-control" id="password" name="password" required>
-            </div>
-            <div class="form-group">
-              <label for="role">Role</label>
-              <select class="form-control" id="role" name="role" required>
-                <option value="user">Regular User</option>
-                <option value="admin">Administrator</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="accessLevel">Access Level</label>
-              <select class="form-control" id="accessLevel" name="accessLevel" required>
-                <?php foreach ($accessLevels as $level): ?>
-                  <option value="<?php echo $level['AccessLevelID']; ?>"><?php echo htmlspecialchars($level['LevelName']); ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="extension">Extension (Optional)</label>
-              <input type="text" class="form-control" id="extension" name="extension">
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-              <button type="submit" class="btn btn-primary">Add User</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  </div>
-
 <script>
-  $(document).ready(function() {
-    // Toggle user status
-    $('.toggle-status').on('click', function() {
-      var userId = $(this).data('id');
-      
-      if (confirm('Are you sure you want to deactivate this user?')) {
-        // In a real application, you would make an AJAX call to update the status
-        window.location.href = 'process-toggle-user.php?id=' + userId;
-      }
+$(document).ready(function() {
+    // Delete user with improved error handling
+    $(document).on('click', '.delete-user', function() {
+        var userId = $(this).data('id');
+        var userName = $(this).closest('tr').find('td:nth-child(2)').text();
+        
+        if (confirm('Are you sure you want to delete user "' + userName + '"? This action cannot be undone.')) {
+            // Show loading state
+            $(this).prop('disabled', true).html('<i class="ti-reload"></i>');
+            
+            $.ajax({
+                url: 'process-delete-user.php',
+                type: 'POST',
+                data: { userId: userId },
+                success: function(response) {
+                    console.log('Delete response:', response);
+                    if (response.trim() === 'success') {
+                        // Remove the row from table
+                        $('button[data-id="' + userId + '"]').closest('tr').fadeOut(function() {
+                            $(this).remove();
+                            // Update user count
+                            var currentCount = parseInt($('.font-weight-normal').text().match(/\d+/)[0]);
+                            $('.font-weight-normal').text('Manage all registered users (' + (currentCount - 1) + ' total)');
+                        });
+                    } else {
+                        alert('Error deleting user: ' + response);
+                        // Reset button
+                        $('button[data-id="' + userId + '"]').prop('disabled', false).html('<i class="ti-trash"></i>');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX Error:', error);
+                    alert('Error deleting user. Please try again.');
+                    // Reset button
+                    $('button[data-id="' + userId + '"]').prop('disabled', false).html('<i class="ti-trash"></i>');
+                }
+            });
+        }
     });
     
-    // Filter functionality
+    // Enhanced filter functionality
     $('#role-filter, #access-level-filter').on('change', function() {
-      filterTable();
+        filterTable();
     });
     
     $('#search-btn').on('click', function() {
-      filterTable();
+        filterTable();
     });
     
     $('#search-input').on('keyup', function(e) {
-      if (e.keyCode === 13) { // Enter key
+        if (e.keyCode === 13) { // Enter key
+            filterTable();
+        }
+        // Also filter on every keystroke for better UX
         filterTable();
-      }
+    });
+    
+    // Clear filters button (optional)
+    $('<button class="btn btn-secondary ml-2" id="clear-filters">Clear</button>').insertAfter('#search-btn');
+    $('#clear-filters').on('click', function() {
+        $('#role-filter').val('');
+        $('#access-level-filter').val('');
+        $('#search-input').val('');
+        filterTable();
     });
     
     function filterTable() {
-      var roleFilter = $('#role-filter').val().toLowerCase();
-      var levelFilter = $('#access-level-filter').val();
-      var searchText = $('#search-input').val().toLowerCase();
-      
-      $('#users-table tbody tr').each(function() {
-        var row = $(this);
-        var role = row.find('td:nth-child(4)').text().toLowerCase();
-        var level = row.find('td:nth-child(5)').text();
-        var name = row.find('td:nth-child(2)').text().toLowerCase();
-        var email = row.find('td:nth-child(3)').text().toLowerCase();
+        var roleFilter = $('#role-filter').val().toLowerCase();
+        var accessLevelFilter = $('#access-level-filter').val().toLowerCase();
+        var searchText = $('#search-input').val().toLowerCase();
         
-        var roleMatch = roleFilter === '' || role.includes(roleFilter);
-        var levelMatch = levelFilter === '' || level === levelFilter;
-        var searchMatch = searchText === '' || name.includes(searchText) || email.includes(searchText);
+        console.log('Filtering with:', { role: roleFilter, accessLevel: accessLevelFilter, search: searchText });
         
-        if (roleMatch && levelMatch && searchMatch) {
-          row.show();
+        var visibleRows = 0;
+        
+        $('#users-table tbody tr').each(function() {
+            var row = $(this);
+            
+            // Skip if this is the "no users found" row
+            if (row.find('td').length === 1) {
+                return;
+            }
+            
+            // Get text content from each column
+            var role = row.find('td:nth-child(4)').text().toLowerCase().trim();
+            var accessLevel = row.find('td:nth-child(5)').text().toLowerCase().trim();
+            var name = row.find('td:nth-child(2)').text().toLowerCase().trim();
+            var email = row.find('td:nth-child(3)').text().toLowerCase().trim();
+            var userId = row.find('td:nth-child(1)').text().toLowerCase().trim();
+            
+            // Check matches
+            var roleMatch = roleFilter === '' || role.includes(roleFilter);
+            var accessLevelMatch = accessLevelFilter === '' || accessLevel.includes(accessLevelFilter);
+            var searchMatch = searchText === '' || 
+                             name.includes(searchText) || 
+                             email.includes(searchText) || 
+                             userId.includes(searchText);
+            
+            if (roleMatch && accessLevelMatch && searchMatch) {
+                row.show();
+                visibleRows++;
+            } else {
+                row.hide();
+            }
+        });
+        
+        // Show/hide "no results" message
+        var noResultsRow = $('#users-table tbody tr.no-results');
+        if (visibleRows === 0 && $('#users-table tbody tr').length > 1) {
+            if (noResultsRow.length === 0) {
+                $('#users-table tbody').append('<tr class="no-results"><td colspan="6" class="text-center text-muted">No users match your search criteria.</td></tr>');
+            } else {
+                noResultsRow.show();
+            }
         } else {
-          row.hide();
+            noResultsRow.hide();
         }
-      });
+        
+        console.log('Visible rows:', visibleRows);
     }
-  });
+});
 </script>
 
 <?php

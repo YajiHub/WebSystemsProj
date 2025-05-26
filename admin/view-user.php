@@ -1,55 +1,101 @@
 <?php
 // File: admin/view-user.php
-session_start();
+require_once '../public/include/session.php';
 
-// // Check if user is logged in and is admin
-// if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
-//     header("Location: ../public/login.php");
-//     exit;
-// }
-
-include 'include/header.php';
-include 'include/admin-sidebar.php';
+// Require admin login
+requireAdmin();
 
 // Get user ID from URL parameter
 $user_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-// In a real application, you would fetch user details from a database
-// This is a placeholder for demonstration purposes
-$user = [
-  'id' => $user_id,
-  'first_name' => 'John',
-  'last_name' => 'Doe',
-  'email' => 'john.doe@example.com',
-  'role' => 'User',
-  'access_level' => 'Level 3',
-  'status' => 'Active',
-  'department' => 'Marketing',
-  'phone' => '(123) 456-7890',
-  'registered_date' => '2023-04-15',
-  'last_login' => '2023-06-01 14:32:45',
-  'document_count' => 12,
-  'storage_used' => '28.6 MB',
-  'storage_limit' => '100 MB'
-];
+if ($user_id <= 0) {
+    $_SESSION['error'] = "Invalid user ID.";
+    header("Location: manage-users.php");
+    exit;
+}
 
-// Recent activity - would be fetched from database
-$user_activity = [
-  ['Upload', 'Financial Report Q2.pdf', '2023-06-01 14:32:45', '192.168.1.45'],
-  ['View', 'Marketing Plan.docx', '2023-06-01 13:15:22', '192.168.1.45'],
-  ['Download', 'Product Mockups.jpg', '2023-06-01 11:45:07', '192.168.1.45'],
-  ['Login', '', '2023-06-01 09:30:15', '192.168.1.45'],
-  ['Delete', 'Old Contract.pdf', '2023-05-31 16:55:33', '192.168.1.45']
-];
+// Get user details from database
+$sql = "SELECT 
+    u.*,
+    a.LevelName,
+    a.AccessLevelID
+FROM user u
+LEFT JOIN accesslevel a ON u.AccessLevel = a.AccessLevelID
+WHERE u.UserID = ?";
 
-// User documents - would be fetched from database
-$user_documents = [
-  [1, 'Project Proposal', 'PDF', '4.2 MB', '2023-06-01', 'Active'],
-  [2, 'Financial Analysis', 'PDF', '1.8 MB', '2023-05-28', 'Active'],
-  [3, 'Meeting Notes', 'PDF', '0.3 MB', '2023-05-20', 'Active'],
-  [4, 'Product Image', 'JPG', '1.2 MB', '2023-05-15', 'Flagged'],
-  [5, 'Logo Design', 'PNG', '0.5 MB', '2023-05-10', 'Active']
-];
+$stmt = mysqli_prepare($conn, $sql);
+mysqli_stmt_bind_param($stmt, "i", $user_id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
+$user = mysqli_fetch_assoc($result);
+
+if (!$user) {
+    $_SESSION['error'] = "User not found.";
+    header("Location: manage-users.php");
+    exit;
+}
+
+// Get user's documents
+$docSql = "SELECT 
+    DocumentID,
+    Title,
+    FileType,
+    UploadDate,
+    CASE 
+        WHEN IsDeleted = 1 THEN 'Deleted'
+        WHEN FlagReason IS NOT NULL AND FlagReason != '' THEN 'Flagged'
+        ELSE 'Active'
+    END as Status,
+    FileLocation
+FROM document 
+WHERE UserID = ? 
+ORDER BY UploadDate DESC 
+LIMIT 10";
+
+$docStmt = mysqli_prepare($conn, $docSql);
+mysqli_stmt_bind_param($docStmt, "i", $user_id);
+mysqli_stmt_execute($docStmt);
+$docResult = mysqli_stmt_get_result($docStmt);
+$userDocuments = [];
+while ($row = mysqli_fetch_assoc($docResult)) {
+    // Get file size if file exists
+    $fileSize = 'Unknown';
+    if (file_exists($row['FileLocation'])) {
+        $bytes = filesize($row['FileLocation']);
+        $fileSize = formatBytes($bytes);
+    }
+    $row['FileSize'] = $fileSize;
+    $userDocuments[] = $row;
+}
+
+// Get document count and total storage
+$statsSql = "SELECT 
+    COUNT(*) as DocumentCount,
+    SUM(CASE WHEN IsDeleted = 0 THEN 1 ELSE 0 END) as ActiveDocuments,
+    SUM(CASE WHEN IsDeleted = 1 THEN 1 ELSE 0 END) as DeletedDocuments,
+    SUM(CASE WHEN FlagReason IS NOT NULL AND FlagReason != '' THEN 1 ELSE 0 END) as FlaggedDocuments
+FROM document 
+WHERE UserID = ?";
+
+$statsStmt = mysqli_prepare($conn, $statsSql);
+mysqli_stmt_bind_param($statsStmt, "i", $user_id);
+mysqli_stmt_execute($statsStmt);
+$statsResult = mysqli_stmt_get_result($statsStmt);
+$userStats = mysqli_fetch_assoc($statsResult);
+
+// Function to format bytes
+function formatBytes($bytes, $precision = 2) {
+    $units = array('B', 'KB', 'MB', 'GB', 'TB');
+    
+    for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+        $bytes /= 1024;
+    }
+    
+    return round($bytes, $precision) . ' ' . $units[$i];
+}
+
+include 'include/header.php';
+include 'include/admin-sidebar.php';
 ?>
 
 <!-- Main Panel -->
@@ -60,7 +106,7 @@ $user_documents = [
       <div class="col-md-12 grid-margin">
         <div class="row">
           <div class="col-12 col-xl-8 mb-4 mb-xl-0">
-            <h3 class="font-weight-bold">User Profile: <?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></h3>
+            <h3 class="font-weight-bold">User Profile: <?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?></h3>
             <nav aria-label="breadcrumb">
               <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="dashboard.php">Dashboard</a></li>
@@ -68,22 +114,6 @@ $user_documents = [
                 <li class="breadcrumb-item active" aria-current="page">View User</li>
               </ol>
             </nav>
-          </div>
-          <div class="col-12 col-xl-4">
-            <div class="justify-content-end d-flex">
-              <a href="edit-user.php?id=<?php echo $user_id; ?>" class="btn btn-primary mr-2">
-                <i class="ti-pencil mr-1"></i> Edit User
-              </a>
-              <?php if ($user['status'] == 'Active'): ?>
-              <button class="btn btn-warning suspend-user" data-id="<?php echo $user_id; ?>">
-                <i class="ti-control-pause mr-1"></i> Suspend User
-              </button>
-              <?php else: ?>
-              <button class="btn btn-success activate-user" data-id="<?php echo $user_id; ?>">
-                <i class="ti-control-play mr-1"></i> Activate User
-              </button>
-              <?php endif; ?>
-            </div>
           </div>
         </div>
       </div>
@@ -95,13 +125,16 @@ $user_documents = [
         <div class="card">
           <div class="card-body">
             <div class="d-flex flex-column align-items-center text-center">
-              <img src="../images/faces/face3.jpg" alt="Profile" class="rounded-circle" width="150">
+              <?php if (!empty($user['ProfilePicture']) && file_exists($user['ProfilePicture'])): ?>
+                <img src="<?php echo $user['ProfilePicture']; ?>" alt="Profile" class="rounded-circle" width="150">
+              <?php else: ?>
+                <div class="default-profile-pic profile-pic-large">
+                  <?php echo strtoupper(substr($user['FirstName'], 0, 1) . substr($user['LastName'], 0, 1)); ?>
+                </div>
+              <?php endif; ?>
               <div class="mt-3">
-                <h4><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></h4>
-                <p class="text-muted font-weight-bold"><?php echo htmlspecialchars($user['department']); ?></p>
-                <span class="badge <?php echo $user['status'] == 'Active' ? 'badge-success' : ($user['status'] == 'Suspended' ? 'badge-warning' : 'badge-danger'); ?>">
-                  <?php echo htmlspecialchars($user['status']); ?>
-                </span>
+                <h4><?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?></h4>
+                <p class="text-muted font-weight-bold"><?php echo htmlspecialchars($user['Department'] ?? 'No Department'); ?></p>
               </div>
             </div>
           </div>
@@ -117,43 +150,49 @@ $user_documents = [
                 <div class="list-group list-group-flush">
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                     <span class="font-weight-bold">User ID:</span>
-                    <span><?php echo htmlspecialchars($user['id']); ?></span>
+                    <span><?php echo $user['UserID']; ?></span>
+                  </div>
+                  <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                    <span class="font-weight-bold">Username:</span>
+                    <span><?php echo htmlspecialchars($user['Username']); ?></span>
                   </div>
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                     <span class="font-weight-bold">Email:</span>
-                    <span><?php echo htmlspecialchars($user['email']); ?></span>
+                    <span><?php echo htmlspecialchars($user['EmailAddress']); ?></span>
                   </div>
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                     <span class="font-weight-bold">Role:</span>
-                    <span><?php echo htmlspecialchars($user['role']); ?></span>
+                    <span class="badge <?php echo $user['UserRole'] == 'admin' ? 'badge-danger' : 'badge-primary'; ?>">
+                      <?php echo ucfirst($user['UserRole']); ?>
+                    </span>
                   </div>
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                     <span class="font-weight-bold">Access Level:</span>
-                    <span><?php echo htmlspecialchars($user['access_level']); ?></span>
-                  </div>
-                  <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Department:</span>
-                    <span><?php echo htmlspecialchars($user['department']); ?></span>
+                    <span><?php echo htmlspecialchars($user['LevelName'] ?? 'Not Set'); ?></span>
                   </div>
                 </div>
               </div>
               <div class="col-md-6">
                 <div class="list-group list-group-flush">
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Phone:</span>
-                    <span><?php echo htmlspecialchars($user['phone']); ?></span>
+                    <span class="font-weight-bold">Department:</span>
+                    <span><?php echo htmlspecialchars($user['Department'] ?? 'Not Set'); ?></span>
                   </div>
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Registered:</span>
-                    <span><?php echo htmlspecialchars($user['registered_date']); ?></span>
+                    <span class="font-weight-bold">Extension:</span>
+                    <span><?php echo htmlspecialchars($user['Extension'] ?? 'Not Set'); ?></span>
                   </div>
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Last Login:</span>
-                    <span><?php echo htmlspecialchars($user['last_login']); ?></span>
+                    <span class="font-weight-bold">Total Documents:</span>
+                    <span class="badge badge-info"><?php echo $userStats['DocumentCount']; ?></span>
                   </div>
                   <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Documents:</span>
-                    <span><?php echo htmlspecialchars($user['document_count']); ?></span>
+                    <span class="font-weight-bold">Active Documents:</span>
+                    <span class="badge badge-success"><?php echo $userStats['ActiveDocuments']; ?></span>
+                  </div>
+                  <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                    <span class="font-weight-bold">Flagged Documents:</span>
+                    <span class="badge badge-warning"><?php echo $userStats['FlaggedDocuments']; ?></span>
                   </div>
                 </div>
               </div>
@@ -163,75 +202,12 @@ $user_documents = [
       </div>
     </div>
     
-    <!-- Recent Activity & User Documents -->
+    <!-- User Documents -->
     <div class="row">
-      <div class="col-md-6 grid-margin stretch-card">
+      <div class="col-md-12 grid-margin stretch-card">
         <div class="card">
           <div class="card-body">
-            <h4 class="card-title">Recent Activity</h4>
-            <div class="table-responsive">
-              <table class="table table-hover">
-                <thead>
-                  <tr>
-                    <th>Action</th>
-                    <th>Resource</th>
-                    <th>Time</th>
-                    <th>IP</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <?php
-                  foreach ($user_activity as $activity) {
-                    // Set icon based on action
-                    $actionIcon = '';
-                    switch ($activity[0]) {
-                      case 'Upload':
-                        $actionIcon = 'ti-upload';
-                        break;
-                      case 'Download':
-                        $actionIcon = 'ti-download';
-                        break;
-                      case 'View':
-                        $actionIcon = 'ti-eye';
-                        break;
-                      case 'Delete':
-                        $actionIcon = 'ti-trash';
-                        break;
-                      case 'Flag':
-                        $actionIcon = 'ti-flag-alt';
-                        break;
-                      case 'Login':
-                        $actionIcon = 'ti-user';
-                        break;
-                      case 'Logout':
-                        $actionIcon = 'ti-power-off';
-                        break;
-                      default:
-                        $actionIcon = 'ti-file';
-                    }
-                    
-                    echo '<tr>';
-                    echo '<td><i class="' . $actionIcon . ' mr-1"></i> ' . $activity[0] . '</td>';
-                    echo '<td>' . $activity[1] . '</td>';
-                    echo '<td>' . $activity[2] . '</td>';
-                    echo '<td>' . $activity[3] . '</td>';
-                    echo '</tr>';
-                  }
-                  ?>
-                </tbody>
-              </table>
-            </div>
-            <div class="text-center mt-4">
-              <a href="access-logs.php?user_id=<?php echo $user_id; ?>" class="btn btn-primary">View Full Log</a>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="col-md-6 grid-margin stretch-card">
-        <div class="card">
-          <div class="card-body">
-            <h4 class="card-title">User Documents</h4>
+            <h4 class="card-title">User Documents (<?php echo count($userDocuments); ?> recent)</h4>
             <div class="table-responsive">
               <table class="table table-hover">
                 <thead>
@@ -239,127 +215,64 @@ $user_documents = [
                     <th>Document</th>
                     <th>Type</th>
                     <th>Size</th>
+                    <th>Upload Date</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <?php
-                  foreach ($user_documents as $doc) {
-                    $statusClass = '';
-                    switch ($doc[5]) {
-                      case 'Active':
-                        $statusClass = 'badge-success';
-                        break;
-                      case 'Flagged':
-                        $statusClass = 'badge-warning';
-                        break;
-                      case 'Deleted':
-                        $statusClass = 'badge-danger';
-                        break;
-                    }
-                    
-                    echo '<tr>';
-                    echo '<td>' . $doc[1] . '</td>';
-                    echo '<td>' . $doc[2] . '</td>';
-                    echo '<td>' . $doc[3] . '</td>';
-                    echo '<td><span class="badge ' . $statusClass . '">' . $doc[5] . '</span></td>';
-                    echo '<td>
-                            <a href="view-document.php?id=' . $doc[0] . '" class="btn btn-primary btn-sm">
-                              <i class="ti-eye"></i>
+                  <?php if (!empty($userDocuments)): ?>
+                    <?php foreach ($userDocuments as $doc): ?>
+                      <?php
+                      $statusClass = '';
+                      switch ($doc['Status']) {
+                        case 'Active':
+                          $statusClass = 'badge-success';
+                          break;
+                        case 'Flagged':
+                          $statusClass = 'badge-warning';
+                          break;
+                        case 'Deleted':
+                          $statusClass = 'badge-danger';
+                          break;
+                      }
+                      ?>
+                      <tr>
+                        <td><?php echo htmlspecialchars($doc['Title']); ?></td>
+                        <td><span class="badge badge-info"><?php echo strtoupper($doc['FileType']); ?></span></td>
+                        <td><?php echo $doc['FileSize']; ?></td>
+                        <td><?php echo date('M d, Y', strtotime($doc['UploadDate'])); ?></td>
+                        <td><span class="badge <?php echo $statusClass; ?>"><?php echo $doc['Status']; ?></span></td>
+                        <td>
+                          <a href="view-document.php?id=<?php echo $doc['DocumentID']; ?>" class="btn btn-primary btn-sm" title="View Document">
+                            <i class="ti-eye"></i>
+                          </a>
+                          <?php if ($doc['Status'] == 'Active'): ?>
+                            <a href="../public/download.php?id=<?php echo $doc['DocumentID']; ?>" class="btn btn-success btn-sm" title="Download">
+                              <i class="ti-download"></i>
                             </a>
-                          </td>';
-                    echo '</tr>';
-                  }
-                  ?>
+                          <?php endif; ?>
+                        </td>
+                      </tr>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <tr>
+                      <td colspan="6" class="text-center text-muted">No documents found</td>
+                    </tr>
+                  <?php endif; ?>
                 </tbody>
               </table>
             </div>
-            <div class="text-center mt-4">
-              <a href="manage-documents.php?user_id=<?php echo $user_id; ?>" class="btn btn-primary">View All Documents</a>
-            </div>
+            <?php if (count($userDocuments) >= 10): ?>
+              <div class="text-center mt-4">
+                <a href="manage-documents.php?user_id=<?php echo $user_id; ?>" class="btn btn-primary">View All Documents</a>
+              </div>
+            <?php endif; ?>
           </div>
         </div>
       </div>
     </div>
   </div>
-
-  <!-- Suspend User Modal -->
-  <div class="modal fade" id="suspendUserModal" tabindex="-1" role="dialog" aria-labelledby="suspendUserModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="suspendUserModalLabel">Suspend User</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </div>
-        <div class="modal-body">
-          <form id="suspendUserForm" action="process-suspend-user.php" method="post">
-            <input type="hidden" id="suspendUserId" name="userId" value="<?php echo $user_id; ?>">
-            <div class="form-group">
-              <label for="suspendReason">Reason for Suspension</label>
-              <select class="form-control" id="suspendReason" name="suspendReason" required>
-                <option value="">-- Select Reason --</option>
-                <option value="violation">Policy Violation</option>
-                <option value="inactive">Inactivity</option>
-                <option value="security">Security Concern</option>
-                <option value="request">User Request</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="suspendDuration">Suspension Duration</label>
-              <select class="form-control" id="suspendDuration" name="suspendDuration" required>
-                <option value="1">1 Day</option>
-                <option value="3">3 Days</option>
-                <option value="7" selected>7 Days</option>
-                <option value="14">14 Days</option>
-                <option value="30">30 Days</option>
-                <option value="0">Indefinite (Until Manual Reactivation)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="suspendComments">Additional Comments</label>
-              <textarea class="form-control" id="suspendComments" name="suspendComments" rows="3"></textarea>
-              <small class="form-text text-muted">Will be sent to the user.</small>
-            </div>
-            <div class="form-group">
-              <div class="form-check form-check-flat form-check-primary">
-                <label class="form-check-label">
-                  <input type="checkbox" class="form-check-input" name="notifyUser" checked>
-                  Notify user via email
-                </label>
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-              <button type="submit" class="btn btn-warning">Suspend User</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  </div>
-
-<script>
-  $(document).ready(function() {
-    // Suspend user
-    $('.suspend-user').on('click', function() {
-      $('#suspendUserModal').modal('show');
-    });
-    
-    // Activate user
-    $('.activate-user').on('click', function() {
-      if (confirm('Are you sure you want to reactivate this user?')) {
-        var userId = $(this).data('id');
-        // In a real application, you would make an AJAX call to reactivate the user
-        console.log('Activating user ' + userId);
-        // Reload page or update UI
-      }
-    });
-  });
-</script>
 
 <?php
 include 'include/footer.php';
