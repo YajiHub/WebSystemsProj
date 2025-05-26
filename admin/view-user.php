@@ -190,7 +190,7 @@ include 'include/admin-sidebar.php';
                     <i class="ti-pencil mr-1"></i> Edit User
                 </a>
                 <?php if ($user_id != $_SESSION['user_id']): ?>
-                <button class="btn btn-danger delete-user" 
+                <button class="btn btn-danger delete-user-btn" 
                         data-id="<?php echo $user_id; ?>" 
                         data-name="<?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?>">
                     <i class="ti-trash mr-1"></i> Delete User
@@ -509,6 +509,11 @@ include 'include/admin-sidebar.php';
 
 <script>
 $(document).ready(function() {
+    console.log('DOM content loaded - setting up view user page event handlers');
+    
+    // Check jQuery version to ensure it's loaded
+    console.log('jQuery version: ' + $.fn.jquery);
+    
     // Apply filters when changed
     $('#document-type-filter, #document-status-filter').on('change', function() {
         const type = $('#document-type-filter').val();
@@ -523,23 +528,43 @@ $(document).ready(function() {
         window.location.href = url;
     });
     
-    // Delete user confirmation
-    $('.delete-user').on('click', function() {
+    // Delete user button click
+    $('.delete-user-btn').on('click', function() {
+        console.log('Delete user button clicked');
         const userId = $(this).data('id');
         const userName = $(this).data('name');
         
+        console.log('User ID to delete: ' + userId);
+        console.log('User name: ' + userName);
+        
+        // Set values in the modal
         $('#delete-user-name').text(userName);
+        
+        // Reset dropdown to default option
+        $('#document-action').val('reassign');
+        
+        // Show the modal
         $('#deleteUserModal').modal('show');
     });
     
+    // Delete confirmation
     $('#confirm-delete').on('click', function() {
-        const userId = $('.delete-user').data('id');
+        // Get user ID from the delete button
+        const userId = $('.delete-user-btn').data('id');
         const documentAction = $('#document-action').val();
         
         if (!userId) {
             alert('Error: Could not determine which user to delete.');
             return;
         }
+        
+        // Validate document action
+        if (!documentAction || !['reassign', 'orphan', 'delete'].includes(documentAction)) {
+            alert('Please select a valid action for the user\'s documents.');
+            return;
+        }
+        
+        console.log("Deleting user ID: " + userId + " with action: " + documentAction);
         
         // Show loading state
         $(this).prop('disabled', true).html('<i class="ti-reload fa-spin"></i> Deleting...');
@@ -552,6 +577,8 @@ $(document).ready(function() {
                 documentAction: documentAction
             },
             success: function(response) {
+                console.log("Response received: " + response);
+                
                 if (response.trim() === 'success') {
                     // Redirect to user management page with success message
                     window.location.href = 'manage-users.php?success=User+deleted+successfully';
@@ -566,10 +593,16 @@ $(document).ready(function() {
                 }
             },
             error: function(xhr, status, error) {
+                console.error("AJAX Error Details:");
+                console.error("Status: " + status);
+                console.error("Error: " + error);
+                console.error("Response Text: " + xhr.responseText);
+                
                 // Show detailed error message
                 $('#deleteUserModal').modal('hide');
                 $('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
-                    'Error: ' + status + ' - ' + error +
+                    'Error: ' + status + ' - ' + error + '<br>' +
+                    'Details: ' + xhr.responseText +
                     '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
                     '<span aria-hidden="true">&times;</span></button></div>')
                     .insertAfter('.grid-margin');

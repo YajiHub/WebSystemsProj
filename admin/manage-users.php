@@ -67,6 +67,7 @@ include 'include/admin-sidebar.php';
     Current user ID: <?php echo $_SESSION['user_id']; ?>
 </div>
 <?php endif; ?>
+
   <div class="content-wrapper">
     <!-- Page Title -->
     <div class="row">
@@ -97,6 +98,11 @@ include 'include/admin-sidebar.php';
     if (isset($_SESSION['success'])) {
         echo '<div class="alert alert-success" role="alert">' . htmlspecialchars($_SESSION['success']) . '</div>';
         unset($_SESSION['success']);
+    }
+    
+    // Display success message from URL parameter
+    if (isset($_GET['success'])) {
+        echo '<div class="alert alert-success" role="alert">' . htmlspecialchars($_GET['success']) . '</div>';
     }
     ?>
     
@@ -365,6 +371,11 @@ include 'include/admin-sidebar.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM content loaded - setting up user management event handlers');
+
+    // Check jQuery version to ensure it's loaded
+    console.log('jQuery version: ' + $.fn.jquery);
+    
     // Form validation for add user
     $('#addUserForm').on('submit', function(e) {
         const password = $('#password').val();
@@ -387,9 +398,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Direct binding for delete user button click
     $(document).on('click', '.delete-user', function(e) {
+        console.log('Delete user button clicked');
         e.preventDefault();
         const userId = $(this).data('id');
         const userName = $(this).data('name');
+        
+        console.log('User ID to delete: ' + userId);
+        console.log('User name: ' + userName);
         
         // Set values in the modal
         $('#delete-user-name').text(userName);
@@ -411,6 +426,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (!userId) {
             alert('Error: Could not determine which user to delete.');
+            return;
+        }
+        
+        // Validate document action
+        if (!documentAction || !['reassign', 'orphan', 'delete'].includes(documentAction)) {
+            alert('Please select a valid action for the user\'s documents.');
             return;
         }
         
@@ -471,11 +492,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             },
             error: function(xhr, status, error) {
-                console.error("AJAX Error: " + status + " - " + error);
+                console.error("AJAX Error Details:");
+                console.error("Status: " + status);
+                console.error("Error: " + error);
+                console.error("Response Text: " + xhr.responseText);
+                
                 // Show detailed error message
                 $('#deleteUserModal').modal('hide');
                 $('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
-                    'Error: ' + status + ' - ' + error +
+                    'Error: ' + status + ' - ' + error + '<br>' +
+                    'Details: ' + xhr.responseText +
                     '<button type="button" class="close" data-dismiss="alert" aria-label="Close">' +
                     '<span aria-hidden="true">&times;</span></button></div>')
                     .insertAfter('.grid-margin');
@@ -485,6 +511,60 @@ document.addEventListener('DOMContentLoaded', function() {
                 $('#confirm-delete').prop('disabled', false).html('Delete User');
             }
         });
+    });
+    
+    // Clear filters button
+    $('#clear-filters').on('click', function() {
+        $('#role-filter').val('');
+        $('#access-level-filter').val('');
+        $('#search-input').val('');
+        // Refresh the table/reload the page
+        location.reload();
+    });
+    
+    // Apply filters
+    function applyFilters() {
+        const roleFilter = $('#role-filter').val().toLowerCase();
+        const levelFilter = $('#access-level-filter').val();
+        const searchText = $('#search-input').val().toLowerCase();
+        
+        $('#users-table tbody tr').each(function() {
+            const row = $(this);
+            const role = row.find('td:eq(3)').text().toLowerCase();
+            const level = row.find('td:eq(4)').text();
+            const name = row.find('td:eq(1)').text().toLowerCase();
+            const email = row.find('td:eq(2)').text().toLowerCase();
+            
+            const roleMatch = !roleFilter || role.includes(roleFilter);
+            const levelMatch = !levelFilter || level === levelFilter;
+            const searchMatch = !searchText || name.includes(searchText) || email.includes(searchText);
+            
+            if (roleMatch && levelMatch && searchMatch) {
+                row.show();
+            } else {
+                row.hide();
+            }
+        });
+        
+        // Update showing counts
+        updatePagination();
+    }
+    
+    // Update pagination info after filtering
+    function updatePagination() {
+        const visibleRows = $('#users-table tbody tr:visible').length;
+        $('#showing-start').text(visibleRows > 0 ? 1 : 0);
+        $('#showing-end').text(visibleRows);
+        $('#total-entries').text(visibleRows);
+    }
+    
+    // Apply filters when filter values change
+    $('#role-filter, #access-level-filter').on('change', applyFilters);
+    $('#search-btn').on('click', applyFilters);
+    $('#search-input').on('keyup', function(e) {
+        if (e.keyCode === 13) {
+            applyFilters();
+        }
     });
 });
 </script>
