@@ -20,6 +20,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         exit;
     }
     
+    // Get document information
+    $document = getDocumentById($conn, $documentId);
+    
+    // Check if document exists
+    if (!$document) {
+        $_SESSION['error'] = "Document not found.";
+        header("Location: manage-documents.php");
+        exit;
+    }
+    
+    // Check if document is already flagged/deleted
+    if ($document['IsDeleted'] == 1) {
+        $_SESSION['error'] = "Document is already flagged or deleted.";
+        header("Location: manage-documents.php");
+        exit;
+    }
+    
     // Combine reason and comments
     $fullReason = $flagReason;
     if (!empty($flagComments)) {
@@ -37,8 +54,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $_SESSION['error'] = "Failed to flag document.";
     }
     
-    // Redirect back to documents page
-    header("Location: manage-documents.php");
+    // If the flag request came from the view-document page, return there
+    if (isset($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], 'view-document.php') !== false) {
+        header("Location: view-document.php?id=" . $documentId);
+    } else {
+        // Otherwise, return to the manage documents page
+        header("Location: manage-documents.php");
+    }
     exit;
 } else {
     // If not a POST request, redirect to documents page

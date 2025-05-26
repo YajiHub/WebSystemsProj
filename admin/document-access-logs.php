@@ -1,46 +1,45 @@
 <?php
 // File: admin/document-access-logs.php
-session_start();
+// Include session management
+require_once '../public/include/session.php';
 
-// // Check if user is logged in and is admin
-// if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
-//     header("Location: ../public/login.php");
-//     exit;
-// }
-
-include 'include/header.php';
-include 'include/admin-sidebar.php';
+// Require admin
+requireAdmin();
 
 // Get document ID from URL parameter
 $doc_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-// In a real application, you would fetch document details from a database
-// This is a placeholder for demonstration purposes
-$document = [
-  'id' => $doc_id,
-  'title' => 'Project Proposal',
-  'type' => 'PDF',
-  'size' => '4.2 MB',
-  'owner' => 'John Doe',
-  'owner_id' => 1,
-  'access_level' => 'Level 3',
-  'uploaded_date' => '2023-06-01',
-  'status' => 'Active'
-];
+// Get document information
+$document = getDocumentById($conn, $doc_id);
 
-// Access logs - would be fetched from database
-$access_logs = [
-  ['John Doe', 'Upload', '2023-06-01 14:32:45'],
-  ['Maria Garcia', 'View', '2023-06-01 15:18:22'],
-  ['John Doe', 'Edit Metadata', '2023-06-02 09:45:07'],
-  ['Ahmed Khan', 'View', '2023-06-03 11:10:15'],
-  ['Lisa Wong', 'Download', '2023-06-04 16:55:33'],
-  ['Robert Smith', 'View', '2023-06-05 10:22:18'],
-  ['Emma Johnson', 'View', '2023-06-06 14:05:49'],
-  ['Michael Brown', 'Download', '2023-06-07 09:30:11'],
-  ['Sophia Martinez', 'View', '2023-06-08 15:45:23'],
-  ['John Doe', 'Edit Metadata', '2023-06-09 11:17:36']
-];
+// Check if document exists
+if (!$document) {
+    $_SESSION['error'] = "Document not found.";
+    header("Location: manage-documents.php");
+    exit;
+}
+
+// Get access logs for the document
+$access_logs = [];
+$sql = "SELECT u.FirstName, u.LastName, a.AccessName, f.Timestamp 
+        FROM fileaccesslog f 
+        JOIN user u ON f.UserID = u.UserID 
+        JOIN accesstype a ON f.AccessType = a.AccessTypeID 
+        WHERE f.DocumentID = $doc_id 
+        ORDER BY f.Timestamp DESC";
+$result = mysqli_query($conn, $sql);
+if ($result) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $access_logs[] = [
+            $row['FirstName'] . ' ' . $row['LastName'],
+            $row['AccessName'],
+            $row['Timestamp']
+        ];
+    }
+}
+
+include 'include/header.php';
+include 'include/admin-sidebar.php';
 ?>
 
 <!-- Main Panel -->
@@ -56,7 +55,7 @@ $access_logs = [
               <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="dashboard.php">Dashboard</a></li>
                 <li class="breadcrumb-item"><a href="manage-documents.php">Documents</a></li>
-                <li class="breadcrumb-item"><a href="view-document.php?id=<?php echo $doc_id; ?>"><?php echo htmlspecialchars($document['title']); ?></a></li>
+                <li class="breadcrumb-item"><a href="view-document.php?id=<?php echo $doc_id; ?>"><?php echo htmlspecialchars($document['Title']); ?></a></li>
                 <li class="breadcrumb-item active" aria-current="page">Access Log</li>
               </ol>
             </nav>
@@ -74,21 +73,21 @@ $access_logs = [
             <div class="row">
               <div class="col-md-3">
                 <div class="font-weight-bold mb-2">Document Title:</div>
-                <div><?php echo htmlspecialchars($document['title']); ?></div>
+                <div><?php echo htmlspecialchars($document['Title']); ?></div>
               </div>
               <div class="col-md-3">
                 <div class="font-weight-bold mb-2">Type:</div>
-                <div><span class="badge badge-info"><?php echo htmlspecialchars($document['type']); ?></span></div>
+                <div><span class="badge badge-info"><?php echo strtoupper($document['FileType']); ?></span></div>
               </div>
               <div class="col-md-3">
                 <div class="font-weight-bold mb-2">Owner:</div>
-                <div><a href="view-user.php?id=<?php echo $document['owner_id']; ?>"><?php echo htmlspecialchars($document['owner']); ?></a></div>
+                <div><a href="view-user.php?id=<?php echo $document['UserID']; ?>"><?php echo htmlspecialchars($document['FirstName'] . ' ' . $document['LastName']); ?></a></div>
               </div>
               <div class="col-md-3">
                 <div class="font-weight-bold mb-2">Status:</div>
                 <div>
-                  <span class="badge <?php echo $document['status'] == 'Active' ? 'badge-success' : ($document['status'] == 'Flagged' ? 'badge-warning' : 'badge-danger'); ?>">
-                    <?php echo htmlspecialchars($document['status']); ?>
+                  <span class="badge <?php echo $document['IsDeleted'] == 0 ? 'badge-success' : ($document['FlagReason'] ? 'badge-warning' : 'badge-danger'); ?>">
+                    <?php echo $document['IsDeleted'] == 0 ? 'Active' : ($document['FlagReason'] ? 'Flagged' : 'Deleted'); ?>
                   </span>
                 </div>
               </div>
@@ -110,18 +109,11 @@ $access_logs = [
               <div class="col-md-3">
                 <select class="form-control" id="action-filter">
                   <option value="">All Actions</option>
-                  <option value="view">View</option>
-                  <option value="download">Download</option>
-                  <option value="upload">Upload</option>
-                  <option value="edit">Edit</option>
-                </select>
-              </div>
-              <div class="col-md-3">
-                <select class="form-control" id="user-filter">
-                  <option value="">All Users</option>
-                  <option value="1">John Doe</option>
-                  <option value="2">Maria Garcia</option>
-                  <option value="3">Ahmed Khan</option>
+                  <option value="View">View</option>
+                  <option value="Download">Download</option>
+                  <option value="Upload">Upload</option>
+                  <option value="Delete">Delete</option>
+                  <option value="Flag">Flag</option>
                 </select>
               </div>
               <div class="col-md-3">
@@ -133,10 +125,13 @@ $access_logs = [
                   <option value="month">This Month</option>
                 </select>
               </div>
-              <div class="col-md-3">
-                <button type="button" class="btn btn-primary" id="export-log">
-                  <i class="ti-download mr-1"></i> Export Log
-                </button>
+              <div class="col-md-6">
+                <div class="input-group">
+                  <input type="text" class="form-control" id="search-input" placeholder="Search user...">
+                  <div class="input-group-append">
+                    <button class="btn btn-primary" id="search-btn" type="button">Search</button>
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -151,47 +146,56 @@ $access_logs = [
                   </tr>
                 </thead>
                 <tbody>
-                  <?php
-                  foreach ($access_logs as $log) {
-                    // Set icon based on action
-                    $actionIcon = '';
-                    switch ($log[1]) {
-                      case 'Upload':
-                        $actionIcon = 'ti-upload';
-                        break;
-                      case 'Download':
-                        $actionIcon = 'ti-download';
-                        break;
-                      case 'View':
-                        $actionIcon = 'ti-eye';
-                        break;
-                      case 'Edit Metadata':
-                        $actionIcon = 'ti-pencil';
-                        break;
-                      default:
-                        $actionIcon = 'ti-file';
-                    }
-                    
-                    echo '<tr>';
-                    echo '<td>' . $log[0] . '</td>';
-                    echo '<td><i class="' . $actionIcon . ' mr-1"></i> ' . $log[1] . '</td>';
-                    echo '<td>' . $log[2] . '</td>';
-                    echo '<td>';
-                    
-                    // Details button - would show more info in a real application
-                    echo '<button type="button" class="btn btn-info btn-sm view-details" data-toggle="modal" data-target="#detailsModal" data-user="' . $log[0] . '" data-action="' . $log[1] . '" data-time="' . $log[2] . '">
+                  <?php if (empty($access_logs)): ?>
+                    <tr>
+                      <td colspan="4" class="text-center">No access logs found for this document.</td>
+                    </tr>
+                  <?php else: ?>
+                    <?php foreach ($access_logs as $log): ?>
+                      <?php
+                      // Set icon based on action
+                      $actionIcon = '';
+                      switch ($log[1]) {
+                        case 'Upload':
+                          $actionIcon = 'ti-upload';
+                          break;
+                        case 'Download':
+                          $actionIcon = 'ti-download';
+                          break;
+                        case 'View':
+                          $actionIcon = 'ti-eye';
+                          break;
+                        case 'Delete':
+                          $actionIcon = 'ti-trash';
+                          break;
+                        case 'Flag':
+                          $actionIcon = 'ti-flag-alt';
+                          break;
+                        default:
+                          $actionIcon = 'ti-file';
+                      }
+                      ?>
+                      <tr>
+                        <td><?php echo htmlspecialchars($log[0]); ?></td>
+                        <td><i class="<?php echo $actionIcon; ?> mr-1"></i> <?php echo htmlspecialchars($log[1]); ?></td>
+                        <td><?php echo htmlspecialchars($log[2]); ?></td>
+                        <td>
+                          <button type="button" class="btn btn-info btn-sm view-details" data-toggle="modal" data-target="#detailsModal" 
+                                  data-user="<?php echo htmlspecialchars($log[0]); ?>" 
+                                  data-action="<?php echo htmlspecialchars($log[1]); ?>" 
+                                  data-time="<?php echo htmlspecialchars($log[2]); ?>">
                             <i class="ti-info-alt"></i> Details
-                          </button>';
-                    
-                    echo '</td>';
-                    echo '</tr>';
-                  }
-                  ?>
+                          </button>
+                        </td>
+                      </tr>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
                 </tbody>
               </table>
             </div>
             
-            <!-- Pagination -->
+            <!-- Pagination - only show if more than 10 logs -->
+            <?php if (count($access_logs) > 10): ?>
             <div class="mt-4">
               <nav>
                 <ul class="pagination justify-content-center">
@@ -207,6 +211,7 @@ $access_logs = [
                 </ul>
               </nav>
             </div>
+            <?php endif; ?>
           </div>
         </div>
       </div>
@@ -227,31 +232,35 @@ $access_logs = [
           <div class="form-group row">
             <label class="col-sm-4 col-form-label">User:</label>
             <div class="col-sm-8">
-              <p class="form-control-static" id="modal-user">John Doe</p>
+              <p class="form-control-static" id="modal-user"></p>
             </div>
           </div>
           <div class="form-group row">
             <label class="col-sm-4 col-form-label">Action:</label>
             <div class="col-sm-8">
-              <p class="form-control-static" id="modal-action">View</p>
+              <p class="form-control-static" id="modal-action"></p>
             </div>
           </div>
           <div class="form-group row">
             <label class="col-sm-4 col-form-label">Timestamp:</label>
             <div class="col-sm-8">
-              <p class="form-control-static" id="modal-time">2023-06-01 15:18:22</p>
+              <p class="form-control-static" id="modal-time"></p>
             </div>
           </div>
           <div class="form-group row">
             <label class="col-sm-4 col-form-label">User Agent:</label>
             <div class="col-sm-8">
-              <p class="form-control-static">Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36</p>
+              <p class="form-control-static">
+                <?php echo htmlspecialchars($_SERVER['HTTP_USER_AGENT'] ?? 'Not available'); ?>
+              </p>
             </div>
           </div>
           <div class="form-group row">
-            <label class="col-sm-4 col-form-label">Session ID:</label>
+            <label class="col-sm-4 col-form-label">IP Address:</label>
             <div class="col-sm-8">
-              <p class="form-control-static">s9d87f6g5h4j3k2l1</p>
+              <p class="form-control-static">
+                <?php echo htmlspecialchars($_SERVER['REMOTE_ADDR'] ?? 'Not available'); ?>
+              </p>
             </div>
           </div>
         </div>
@@ -265,7 +274,7 @@ $access_logs = [
 <script>
   $(document).ready(function() {
     // Initialize DataTable
-    $('#access-logs-table').DataTable({
+    var table = $('#access-logs-table').DataTable({
       "pageLength": 10,
       "lengthMenu": [10, 25, 50, 100],
       "order": [[ 2, "desc" ]],
@@ -279,10 +288,54 @@ $access_logs = [
       }
     });
     
-    // Export logs
-    $('#export-log').on('click', function() {
-      // In a real application, you would trigger a download of the logs
-      alert('Exporting access logs as CSV...');
+    // Action filter
+    $('#action-filter').on('change', function() {
+      var actionFilter = $(this).val();
+      table.column(1).search(actionFilter).draw();
+    });
+    
+    // Date filter
+    $('#date-filter').on('change', function() {
+      var dateFilter = $(this).val();
+      var today = new Date();
+      var filterDate = '';
+      
+      switch(dateFilter) {
+        case 'today':
+          filterDate = today.toISOString().split('T')[0];
+          table.column(2).search(filterDate).draw();
+          break;
+        case 'yesterday':
+          var yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          filterDate = yesterday.toISOString().split('T')[0];
+          table.column(2).search(filterDate).draw();
+          break;
+        case 'week':
+          // Search for dates in the last 7 days
+          table.column(2).search('').draw();
+          break;
+        case 'month':
+          // Search for dates in the current month
+          table.column(2).search('').draw();
+          break;
+        default:
+          table.column(2).search('').draw();
+      }
+    });
+    
+    // Search button
+    $('#search-btn').on('click', function() {
+      var searchText = $('#search-input').val();
+      table.column(0).search(searchText).draw();
+    });
+    
+    // Search input - search when Enter key is pressed
+    $('#search-input').on('keyup', function(e) {
+      if (e.keyCode === 13) {
+        var searchText = $(this).val();
+        table.column(0).search(searchText).draw();
+      }
     });
     
     // Pass data to modal
@@ -303,3 +356,4 @@ $access_logs = [
 <?php
 include 'include/footer.php';
 ?>
+                

@@ -1,44 +1,46 @@
 <?php
 // File: admin/view-document.php
-session_start();
+// Include session management
+require_once '../public/include/session.php';
 
-// // Check if user is logged in and is admin
-// if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
-//     header("Location: ../public/login.php");
-//     exit;
-// }
-
-include 'include/header.php';
-include 'include/admin-sidebar.php';
+// Require admin
+requireAdmin();
 
 // Get document ID from URL parameter
 $doc_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-// In a real application, you would fetch document details from a database
-// This is a placeholder for demonstration purposes
-$document = [
-  'id' => $doc_id,
-  'title' => 'Project Proposal',
-  'type' => 'PDF',
-  'size' => '4.2 MB',
-  'owner' => 'John Doe',
-  'owner_id' => 1,
-  'access_level' => 'Level 3',
-  'uploaded_date' => '2023-06-01',
-  'status' => 'Active',
-  'description' => 'This document contains the project proposal for the new marketing campaign.',
-  'tags' => ['project', 'proposal', 'marketing'],
-  'path' => '../sample-files/sample.pdf'
-];
+// Get document information
+$document = getDocumentById($conn, $doc_id);
 
-// Access history - would be fetched from database
-$access_history = [
-  ['John Doe', 'Upload', '2023-06-01 14:32:45'],
-  ['Maria Garcia', 'View', '2023-06-01 15:18:22'],
-  ['John Doe', 'Edit Metadata', '2023-06-02 09:45:07'],
-  ['Ahmed Khan', 'View', '2023-06-03 11:10:15'],
-  ['Lisa Wong', 'Download', '2023-06-04 16:55:33']
-];
+// Check if document exists
+if (!$document) {
+    $_SESSION['error'] = "Document not found.";
+    header("Location: manage-documents.php");
+    exit;
+}
+
+// Get access history for the document
+$access_history = [];
+$sql = "SELECT u.FirstName, u.LastName, a.AccessName, f.Timestamp 
+        FROM fileaccesslog f 
+        JOIN user u ON f.UserID = u.UserID 
+        JOIN accesstype a ON f.AccessType = a.AccessTypeID 
+        WHERE f.DocumentID = $doc_id 
+        ORDER BY f.Timestamp DESC 
+        LIMIT 5";
+$result = mysqli_query($conn, $sql);
+if ($result) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $access_history[] = [
+            $row['FirstName'] . ' ' . $row['LastName'],
+            $row['AccessName'],
+            $row['Timestamp']
+        ];
+    }
+}
+
+include 'include/header.php';
+include 'include/admin-sidebar.php';
 ?>
 
 <!-- Main Panel -->
@@ -49,12 +51,12 @@ $access_history = [
       <div class="col-md-12 grid-margin">
         <div class="row">
           <div class="col-12 col-xl-8 mb-4 mb-xl-0">
-            <h3 class="font-weight-bold"><?php echo htmlspecialchars($document['title']); ?></h3>
+            <h3 class="font-weight-bold"><?php echo htmlspecialchars($document['Title']); ?></h3>
             <nav aria-label="breadcrumb">
               <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="dashboard.php">Dashboard</a></li>
                 <li class="breadcrumb-item"><a href="manage-documents.php">Documents</a></li>
-                <li class="breadcrumb-item active" aria-current="page"><?php echo htmlspecialchars($document['title']); ?></li>
+                <li class="breadcrumb-item active" aria-current="page"><?php echo htmlspecialchars($document['Title']); ?></li>
               </ol>
             </nav>
           </div>
@@ -66,7 +68,7 @@ $access_history = [
               <a href="document-access-logs.php?id=<?php echo $doc_id; ?>" class="btn btn-info mr-2">
                 <i class="ti-list mr-1"></i> Access Logs
               </a>
-              <?php if ($document['status'] == 'Active'): ?>
+              <?php if ($document['IsDeleted'] == 0): ?>
               <button class="btn btn-warning mr-2 flag-document" data-id="<?php echo $doc_id; ?>">
                 <i class="ti-flag-alt mr-1"></i> Flag
               </button>
@@ -88,10 +90,13 @@ $access_history = [
             <div class="document-viewer">
               <?php 
               // Based on document type, display appropriate viewer
-              if ($document['type'] == 'PDF') {
-                echo '<iframe src="' . $document['path'] . '" width="100%" height="600px" style="border: none;"></iframe>';
-              } elseif ($document['type'] == 'JPG' || $document['type'] == 'PNG') {
-                echo '<img src="' . $document['path'] . '" class="img-fluid" alt="' . htmlspecialchars($document['title']) . '">';
+              $fileType = strtolower($document['FileType']);
+              $filePath = $document['FileLocation'];
+              
+              if ($fileType == 'pdf') {
+                echo '<iframe src="' . $filePath . '" width="100%" height="600px" style="border: none;"></iframe>';
+              } elseif ($fileType == 'jpg' || $fileType == 'jpeg' || $fileType == 'png') {
+                echo '<img src="' . $filePath . '" class="img-fluid" alt="' . htmlspecialchars($document['Title']) . '">';
               } else {
                 echo '<div class="alert alert-warning">Preview not available for this file type.</div>';
               }
@@ -109,44 +114,46 @@ $access_history = [
             <div class="list-group list-group-flush">
               <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                 <span class="font-weight-bold">File Type:</span>
-                <span class="badge badge-info"><?php echo htmlspecialchars($document['type']); ?></span>
+                <span class="badge badge-info"><?php echo htmlspecialchars(strtoupper($document['FileType'])); ?></span>
               </div>
               <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                 <span class="font-weight-bold">Size:</span>
-                <span><?php echo htmlspecialchars($document['size']); ?></span>
+                <span><?php echo file_exists($filePath) ? formatFileSize(filesize($filePath)) : 'Unknown'; ?></span>
               </div>
               <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                 <span class="font-weight-bold">Owner:</span>
-                <a href="view-user.php?id=<?php echo $document['owner_id']; ?>"><?php echo htmlspecialchars($document['owner']); ?></a>
+                <a href="view-user.php?id=<?php echo $document['UserID']; ?>"><?php echo htmlspecialchars($document['FirstName'] . ' ' . $document['LastName']); ?></a>
               </div>
               <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                 <span class="font-weight-bold">Access Level:</span>
-                <span><?php echo htmlspecialchars($document['access_level']); ?></span>
+                <span><?php echo htmlspecialchars($document['LevelName']); ?></span>
               </div>
               <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                 <span class="font-weight-bold">Uploaded:</span>
-                <span><?php echo htmlspecialchars($document['uploaded_date']); ?></span>
+                <span><?php echo date('Y-m-d', strtotime($document['UploadDate'])); ?></span>
               </div>
               <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                 <span class="font-weight-bold">Status:</span>
-                <span class="badge <?php echo $document['status'] == 'Active' ? 'badge-success' : ($document['status'] == 'Flagged' ? 'badge-warning' : 'badge-danger'); ?>">
-                  <?php echo htmlspecialchars($document['status']); ?>
+                <span class="badge <?php echo $document['IsDeleted'] == 0 ? 'badge-success' : ($document['FlagReason'] ? 'badge-warning' : 'badge-danger'); ?>">
+                  <?php echo $document['IsDeleted'] == 0 ? 'Active' : ($document['FlagReason'] ? 'Flagged' : 'Deleted'); ?>
                 </span>
               </div>
+              <?php if ($document['FlagReason']): ?>
+              <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                <span class="font-weight-bold">Flag Reason:</span>
+                <span><?php echo htmlspecialchars($document['FlagReason']); ?></span>
+              </div>
+              <?php endif; ?>
               <div class="list-group-item px-0">
                 <span class="font-weight-bold">Description:</span>
-                <p class="mt-2"><?php echo htmlspecialchars($document['description']); ?></p>
+                <p class="mt-2"><?php echo htmlspecialchars($document['FileTypeDescription'] ?? 'No description available.'); ?></p>
               </div>
+              <?php if (isset($document['CategoryName'])): ?>
               <div class="list-group-item px-0">
-                <span class="font-weight-bold">Tags:</span>
-                <div class="mt-2">
-                  <?php
-                  foreach ($document['tags'] as $tag) {
-                    echo '<span class="badge badge-primary mr-1">' . htmlspecialchars($tag) . '</span>';
-                  }
-                  ?>
-                </div>
+                <span class="font-weight-bold">Category:</span>
+                <p class="mt-2"><?php echo htmlspecialchars($document['CategoryName']); ?></p>
               </div>
+              <?php endif; ?>
             </div>
           </div>
         </div>
@@ -165,15 +172,19 @@ $access_history = [
                   </tr>
                 </thead>
                 <tbody>
-                  <?php
-                  foreach ($access_history as $access) {
-                    echo '<tr>';
-                    echo '<td>' . $access[0] . '</td>';
-                    echo '<td>' . $access[1] . '</td>';
-                    echo '<td>' . $access[2] . '</td>';
-                    echo '</tr>';
-                  }
-                  ?>
+                  <?php if (empty($access_history)): ?>
+                    <tr>
+                      <td colspan="3" class="text-center">No access history found.</td>
+                    </tr>
+                  <?php else: ?>
+                    <?php foreach ($access_history as $access): ?>
+                      <tr>
+                        <td><?php echo htmlspecialchars($access[0]); ?></td>
+                        <td><?php echo htmlspecialchars($access[1]); ?></td>
+                        <td><?php echo htmlspecialchars($access[2]); ?></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  <?php endif; ?>
                 </tbody>
               </table>
             </div>
@@ -270,5 +281,16 @@ $access_history = [
 </script>
 
 <?php
+// Helper function to format file size
+function formatFileSize($bytes) {
+    if ($bytes >= 1048576) {
+        return number_format($bytes / 1048576, 2) . ' MB';
+    } elseif ($bytes >= 1024) {
+        return number_format($bytes / 1024, 2) . ' KB';
+    } else {
+        return $bytes . ' bytes';
+    }
+}
+
 include 'include/footer.php';
 ?>
