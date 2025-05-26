@@ -131,28 +131,6 @@ mysqli_stmt_execute($statsStmt);
 $statsResult = mysqli_stmt_get_result($statsStmt);
 $userStats = mysqli_fetch_assoc($statsResult);
 
-// Get user activity logs
-$activitySql = "SELECT 
-    f.LogID,
-    f.Timestamp,
-    d.Title as DocumentTitle,
-    a.AccessName as Action
-FROM fileaccesslog f
-LEFT JOIN document d ON f.DocumentID = d.DocumentID
-LEFT JOIN accesstype a ON f.AccessType = a.AccessTypeID
-WHERE f.UserID = ?
-ORDER BY f.Timestamp DESC
-LIMIT 5";
-
-$activityStmt = mysqli_prepare($conn, $activitySql);
-mysqli_stmt_bind_param($activityStmt, "i", $user_id);
-mysqli_stmt_execute($activityStmt);
-$activityResult = mysqli_stmt_get_result($activityStmt);
-$userActivity = [];
-while ($row = mysqli_fetch_assoc($activityResult)) {
-    $userActivity[] = $row;
-}
-
 // Function to format bytes
 function formatBytes($bytes, $precision = 2) {
     $units = array('B', 'KB', 'MB', 'GB', 'TB');
@@ -330,97 +308,9 @@ include 'include/admin-sidebar.php';
                     <span class="font-weight-bold">Status:</span>
                     <span class="badge badge-success">Active</span>
                   </div>
-                  <div class="list-group-item d-flex justify-content-between align-items-center px-0">
-                    <span class="font-weight-bold">Last Activity:</span>
-                    <span><?php echo !empty($userActivity) ? timeAgo($userActivity[0]['Timestamp']) : 'No activity'; ?></span>
-                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Recent Activity -->
-    <div class="row">
-      <div class="col-md-12 grid-margin stretch-card">
-        <div class="card">
-          <div class="card-body">
-            <h4 class="card-title">Recent Activity</h4>
-            <div class="table-responsive">
-              <table class="table table-hover">
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Action</th>
-                    <th>Document</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <?php if (empty($userActivity)): ?>
-                    <tr>
-                      <td colspan="3" class="text-center">No activity found for this user</td>
-                    </tr>
-                  <?php else: ?>
-                    <?php foreach ($userActivity as $activity): ?>
-                      <tr>
-                        <td><?php echo timeAgo($activity['Timestamp']); ?></td>
-                        <td>
-                          <?php 
-                            $actionIcon = '';
-                            $actionClass = '';
-                            switch ($activity['Action']) {
-                              case 'Upload':
-                                $actionIcon = 'ti-upload';
-                                $actionClass = 'text-success';
-                                break;
-                              case 'Download':
-                                $actionIcon = 'ti-download';
-                                $actionClass = 'text-primary';
-                                break;
-                              case 'View':
-                                $actionIcon = 'ti-eye';
-                                $actionClass = 'text-info';
-                                break;
-                              case 'Delete':
-                                $actionIcon = 'ti-trash';
-                                $actionClass = 'text-danger';
-                                break;
-                              case 'Flag':
-                                $actionIcon = 'ti-flag-alt';
-                                $actionClass = 'text-warning';
-                                break;
-                              default:
-                                $actionIcon = 'ti-file';
-                                $actionClass = '';
-                            }
-                          ?>
-                          <i class="<?php echo $actionIcon; ?> <?php echo $actionClass; ?> mr-1"></i> 
-                          <?php echo htmlspecialchars($activity['Action']); ?>
-                        </td>
-                        <td>
-                          <?php if (!empty($activity['DocumentTitle'])): ?>
-                            <a href="view-document.php?id=<?php echo $activity['DocumentID']; ?>" class="text-dark">
-                              <?php echo htmlspecialchars($activity['DocumentTitle']); ?>
-                            </a>
-                          <?php else: ?>
-                            <span class="text-muted">Deleted document</span>
-                          <?php endif; ?>
-                        </td>
-                      </tr>
-                    <?php endforeach; ?>
-                  <?php endif; ?>
-                </tbody>
-              </table>
-            </div>
-            <?php if (!empty($userActivity)): ?>
-              <div class="text-center mt-3">
-                <a href="user-activity.php?id=<?php echo $user_id; ?>" class="btn btn-outline-primary btn-sm">
-                  View All Activity
-                </a>
-              </div>
-            <?php endif; ?>
           </div>
         </div>
       </div>

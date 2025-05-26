@@ -160,38 +160,38 @@ include 'include/admin-sidebar.php';
                     </tr>
                   <?php else: ?>
                     <?php foreach ($users as $user): ?>
-                      <tr data-user-id="<?php echo $user['UserID']; ?>">
-                        <td><?php echo $user['UserID']; ?></td>
-                        <td><?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?></td>
-                        <td><?php echo htmlspecialchars($user['EmailAddress']); ?></td>
-                        <td>
-                          <span class="badge <?php echo $user['UserRole'] == 'admin' ? 'badge-danger' : 'badge-primary'; ?>">
-                            <?php echo ucfirst($user['UserRole']); ?>
-                          </span>
-                        </td>
-                        <td><?php echo htmlspecialchars($user['LevelName'] ?? 'Not Set'); ?></td>
-                        <td>
-                          <a href="view-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-info btn-sm" title="View User">
-                            <i class="ti-eye"></i>
-                          </a>
-                          <a href="edit-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-primary btn-sm" title="Edit User">
-                            <i class="ti-pencil"></i>
-                          </a>
-                          <?php if ($user['UserID'] != $_SESSION['user_id']): ?>
-                            <button type="button" class="btn btn-danger btn-sm delete-user" 
-                                    data-id="<?php echo $user['UserID']; ?>" 
-                                    data-name="<?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?>"
-                                    title="Delete User">
-                              <i class="ti-trash"></i>
-                            </button>
-                          <?php else: ?>
-                            <button type="button" class="btn btn-secondary btn-sm" disabled title="You cannot delete your own account">
-                              <i class="ti-trash"></i>
-                            </button>
-                          <?php endif; ?>
-                        </td>
-                      </tr>
-                    <?php endforeach; ?>
+                    <tr data-user-id="<?php echo $user['UserID']; ?>">
+                      <td><?php echo $user['UserID']; ?></td>
+                      <td><?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?></td>
+                      <td><?php echo htmlspecialchars($user['EmailAddress']); ?></td>
+                      <td>
+                        <span class="badge <?php echo $user['UserRole'] == 'admin' ? 'badge-danger' : 'badge-primary'; ?>">
+                          <?php echo ucfirst($user['UserRole']); ?>
+                        </span>
+                      </td>
+                      <td><?php echo htmlspecialchars($user['LevelName'] ?? 'Not Set'); ?></td>
+                      <td>
+                        <a href="view-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-info btn-sm" title="View User">
+                          <i class="ti-eye"></i>
+                        </a>
+                        <a href="edit-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-primary btn-sm" title="Edit User">
+                          <i class="ti-pencil"></i>
+                        </a>
+                        <?php if ($user['UserID'] != $_SESSION['user_id']): ?>
+                          <button type="button" class="btn btn-danger btn-sm delete-user" 
+                                  data-id="<?php echo $user['UserID']; ?>" 
+                                  data-name="<?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?>"
+                                  title="Delete User">
+                            <i class="ti-trash"></i>
+                          </button>
+                        <?php else: ?>
+                          <button type="button" class="btn btn-secondary btn-sm" disabled title="You cannot delete your own account">
+                            <i class="ti-trash"></i>
+                          </button>
+                        <?php endif; ?>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
                   <?php endif; ?>
                 </tbody>
               </table>
@@ -223,40 +223,41 @@ include 'include/admin-sidebar.php';
   </div>
 
   <!-- Delete User Confirmation Modal -->
-  <div class="modal fade" id="deleteUserModal" tabindex="-1" role="dialog" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="deleteUserModalLabel">Delete User</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-          </button>
+<div class="modal fade" id="deleteUserModal" tabindex="-1" role="dialog" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteUserModalLabel">Delete User</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete the user <strong id="delete-user-name"></strong>?</p>
+        <p class="text-danger">This action cannot be undone!</p>
+        
+        <div class="form-group mt-4">
+          <label for="document-action">What would you like to do with this user's documents?</label>
+          <select class="form-control" id="document-action" name="document-action">
+            <option value="reassign">Reassign to admin (recommended)</option>
+            <option value="orphan">Remove user association</option>
+            <option value="delete">Delete all documents</option>
+          </select>
+          <small class="form-text text-muted">
+            <strong>Reassign:</strong> Transfer ownership to admin account<br>
+            <strong>Remove association:</strong> Keep documents but remove ownership<br>
+            <strong>Delete:</strong> Permanently delete all user documents
+          </small>
         </div>
-        <div class="modal-body">
-          <p>Are you sure you want to delete the user <strong id="delete-user-name"></strong>?</p>
-          <p class="text-danger">This action cannot be undone!</p>
-          
-          <div class="form-group mt-4">
-            <label for="document-action">What would you like to do with this user's documents?</label>
-            <select class="form-control" id="document-action" name="document-action">
-              <option value="reassign">Reassign to admin (recommended)</option>
-              <option value="orphan">Remove user association</option>
-              <option value="delete">Delete all documents</option>
-            </select>
-            <small class="form-text text-muted">
-              <strong>Reassign:</strong> Transfer ownership to admin account<br>
-              <strong>Remove association:</strong> Keep documents but remove ownership<br>
-              <strong>Delete:</strong> Permanently delete all user documents
-            </small>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-danger" id="confirm-delete">Delete User</button>
-        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete">Delete User</button>
       </div>
     </div>
   </div>
+</div>
+
 
   <!-- Add User Modal -->
   <div class="modal fade" id="addUserModal" tabindex="-1" role="dialog" aria-labelledby="addUserModalLabel" aria-hidden="true">
@@ -363,7 +364,7 @@ include 'include/admin-sidebar.php';
   </div>
 
 <script>
-$(document).ready(function() {
+document.addEventListener('DOMContentLoaded', function() {
     // Form validation for add user
     $('#addUserForm').on('submit', function(e) {
         const password = $('#password').val();
@@ -384,20 +385,28 @@ $(document).ready(function() {
         return true;
     });
     
-    // Delete user with improved error handling
-    $('#deleteUserModal').on('show.bs.modal', function(e) {
-        const button = $(e.relatedTarget);
-        const userId = button.data('id');
-        const userName = button.data('name');
+    // Direct binding for delete user button click
+    $(document).on('click', '.delete-user', function(e) {
+        e.preventDefault();
+        const userId = $(this).data('id');
+        const userName = $(this).data('name');
         
+        // Set values in the modal
         $('#delete-user-name').text(userName);
+        // Store the user ID to a global variable for later use
+        window.userIdToDelete = userId;
         
         // Reset dropdown to default option
         $('#document-action').val('reassign');
+        
+        // Show the modal
+        $('#deleteUserModal').modal('show');
     });
     
-    $('#confirm-delete').on('click', function() {
-        const userId = $('.delete-user[data-id]:visible').data('id');
+    // Direct binding for confirm delete button click
+    $(document).on('click', '#confirm-delete', function() {
+        // Get the user ID from the global variable
+        const userId = window.userIdToDelete;
         const documentAction = $('#document-action').val();
         
         if (!userId) {
@@ -405,9 +414,12 @@ $(document).ready(function() {
             return;
         }
         
+        console.log("Deleting user ID: " + userId + " with action: " + documentAction);
+        
         // Show loading state
         $(this).prop('disabled', true).html('<i class="ti-reload fa-spin"></i> Deleting...');
         
+        // Perform the AJAX request
         $.ajax({
             url: 'process-delete-user.php',
             type: 'POST',
@@ -416,6 +428,8 @@ $(document).ready(function() {
                 documentAction: documentAction
             },
             success: function(response) {
+                console.log("Response received: " + response);
+                
                 if (response.trim() === 'success') {
                     // Add animation to show deletion
                     $('tr[data-user-id="' + userId + '"]').fadeOut(500, function() {
@@ -438,9 +452,6 @@ $(document).ready(function() {
                                 $(this).remove();
                             });
                         
-                        // Update pagination info
-                        updatePaginationInfo();
-                        
                         // Check if table is now empty
                         if ($('#users-table tbody tr').length === 0) {
                             $('#users-table tbody').html('<tr><td colspan="6" class="text-center">No users found.</td></tr>');
@@ -460,6 +471,7 @@ $(document).ready(function() {
                 }
             },
             error: function(xhr, status, error) {
+                console.error("AJAX Error: " + status + " - " + error);
                 // Show detailed error message
                 $('#deleteUserModal').modal('hide');
                 $('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
@@ -474,124 +486,6 @@ $(document).ready(function() {
             }
         });
     });
-    
-    // Enhanced filter functionality
-    $('#role-filter, #access-level-filter').on('change', function() {
-        filterTable();
-    });
-    
-    $('#search-btn').on('click', function() {
-        filterTable();
-    });
-    
-    $('#search-input').on('keyup', function(e) {
-        if (e.keyCode === 13) { // Enter key
-            filterTable();
-        }
-    });
-    
-    // Clear filters button
-    $('#clear-filters').on('click', function() {
-        $('#role-filter').val('');
-        $('#access-level-filter').val('');
-        $('#search-input').val('');
-        filterTable();
-    });
-    
-    function filterTable() {
-        var roleFilter = $('#role-filter').val().toLowerCase();
-        var accessLevelFilter = $('#access-level-filter').val().toLowerCase();
-        var searchText = $('#search-input').val().toLowerCase();
-        
-        var visibleRows = 0;
-        
-        $('#users-table tbody tr').each(function() {
-            var row = $(this);
-            
-            // Skip if this is the "no users found" row
-            if (row.find('td').length === 1) {
-                return;
-            }
-            
-            // Get text content from each column
-            var role = row.find('td:nth-child(4)').text().toLowerCase().trim();
-            var accessLevel = row.find('td:nth-child(5)').text().toLowerCase().trim();
-            var name = row.find('td:nth-child(2)').text().toLowerCase().trim();
-            var email = row.find('td:nth-child(3)').text().toLowerCase().trim();
-            var userId = row.find('td:nth-child(1)').text().toLowerCase().trim();
-            
-            // Check matches
-            var roleMatch = roleFilter === '' || role.includes(roleFilter);
-            var accessLevelMatch = accessLevelFilter === '' || accessLevel.includes(accessLevelFilter);
-            var searchMatch = searchText === '' || 
-                             name.includes(searchText) || 
-                             email.includes(searchText) || 
-                             userId.includes(searchText);
-            
-            if (roleMatch && accessLevelMatch && searchMatch) {
-                row.show();
-                visibleRows++;
-            } else {
-                row.hide();
-            }
-        });
-        
-        // Show/hide "no results" message
-        var noResultsRow = $('#users-table tbody tr.no-results');
-        if (visibleRows === 0 && $('#users-table tbody tr').length > 1) {
-            if (noResultsRow.length === 0) {
-                $('#users-table tbody').append('<tr class="no-results"><td colspan="6" class="text-center text-muted">No users match your search criteria.</td></tr>');
-            } else {
-                noResultsRow.show();
-            }
-        } else {
-            noResultsRow.hide();
-        }
-        
-        // Update pagination info
-        updatePaginationInfo();
-    }
-    
-    // Initialize DataTable with improved options
-    var table = $('#users-table').DataTable({
-        "pageLength": 10,
-        "lengthMenu": [10, 25, 50, 100],
-        "searching": true,
-        "ordering": true,
-        "paging": true,
-        "info": true,
-        "language": {
-            "search": "Search:",
-            "lengthMenu": "Show _MENU_ entries per page",
-            "info": "Showing _START_ to _END_ of _TOTAL_ entries",
-            "infoEmpty": "Showing 0 to 0 of 0 entries",
-            "infoFiltered": "(filtered from _MAX_ total entries)",
-            "zeroRecords": "No matching records found",
-            "paginate": {
-                "first": "First",
-                "last": "Last",
-                "next": "Next",
-                "previous": "Previous"
-            }
-        }
-    });
-    
-    // Update pagination information
-    function updatePaginationInfo() {
-        const visibleRows = $('#users-table tbody tr:visible').length;
-        const noResultsRow = $('#users-table tbody tr.no-results:visible').length;
-        const actualVisibleRows = visibleRows - noResultsRow;
-        
-        if (actualVisibleRows <= 0) {
-            $('#showing-start').text('0');
-            $('#showing-end').text('0');
-            $('#total-entries').text('0');
-        } else {
-            $('#showing-start').text('1');
-            $('#showing-end').text(Math.min(10, actualVisibleRows));
-            $('#total-entries').text(actualVisibleRows);
-        }
-    }
 });
 </script>
 
