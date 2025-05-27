@@ -1,5 +1,19 @@
 <?php
 // File: admin/include/header.php
+// Include session management to get current user info
+require_once '../public/include/session.php';
+
+// Get current user information
+$currentUser = getCurrentUser($conn);
+$userInitials = $currentUser ? strtoupper(substr($currentUser['FirstName'], 0, 1) . substr($currentUser['LastName'], 0, 1)) : 'AD';
+
+// Check if user has a custom profile picture
+$hasCustomPicture = false;
+$profilePicture = '';
+if ($currentUser && !empty($currentUser['ProfilePicture']) && file_exists($currentUser['ProfilePicture'])) {
+    $hasCustomPicture = true;
+    $profilePicture = $currentUser['ProfilePicture'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -15,14 +29,38 @@
 
   <link rel="stylesheet" href="../vendors/datatables.net-bs4/dataTables.bootstrap4.css">
   <link rel="stylesheet" type="text/css" href="../js/select.dataTables.min.css">
+
+  <style>
+  /* Default profile picture styling */
+  .default-profile-pic {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    border: 2px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #6c757d;
+  }
+  
+  .profile-pic-large {
+    width: 150px;
+    height: 150px;
+    font-size: 48px;
+  }
+  </style>
+
 </head>
 <body>
   <div class="container-scroller">
     <!-- Navigation Bar -->
     <nav class="navbar col-lg-12 col-12 p-0 fixed-top d-flex flex-row">
       <div class="text-center navbar-brand-wrapper d-flex align-items-center justify-content-center">
-        <a class="navbar-brand brand-logo mr-5" href="dashboard.php"><img src="../images/updocs.png" class="mr-2" alt="logo"   width="140" height="210" /></a>
-        <a class="navbar-brand brand-logo-mini" href="dashboard.php"><img src="../images/logo-mini.svg" alt="logo"/></a>
+        <a class="navbar-brand brand-logo mr-5" href="dashboard.php"><img src="../images/updocs.png" class="mr-2" alt="logo"   width="120" height="200" /></a>
+        <a class="navbar-brand brand-logo-mini" href="dashboard.php"><img src="../images/updocssmall.png" alt="logo"/></a>
       </div>
       <div class="navbar-menu-wrapper d-flex align-items-center justify-content-end">
         <button class="navbar-toggler navbar-toggler align-self-center" type="button" data-toggle="minimize">
@@ -66,10 +104,16 @@
           </li>
           <li class="nav-item nav-profile dropdown">
             <a class="nav-link dropdown-toggle" href="#" data-toggle="dropdown" id="profileDropdown">
-              <img src="../images/faces/face1.jpg" alt="profile"/>
+              <?php if ($hasCustomPicture): ?>
+                <img src="<?php echo $profilePicture; ?>" alt="profile"/>
+              <?php else: ?>
+                <div class="default-profile-pic">
+                  <?php echo $userInitials; ?>
+                </div>
+              <?php endif; ?>
             </a>
             <div class="dropdown-menu dropdown-menu-right navbar-dropdown" aria-labelledby="profileDropdown">
-              <a class="dropdown-item" href="profile.php">
+              <a class="dropdown-item" href="../public/profile.php">
                 <i class="ti-settings text-primary"></i>
                 Profile
               </a>
