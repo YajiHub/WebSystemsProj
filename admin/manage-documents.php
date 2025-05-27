@@ -276,170 +276,219 @@ include 'include/admin-sidebar.php';
     </div>
   </div>
 
+<!-- Add this script to the bottom of the page -->
 <script>
-  $(document).ready(function() {
-    // Flag document
-    $('.flag-document').on('click', function() {
+// Wait for the DOM to be fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+  console.log("Document ready - initializing document management");
+  
+  // Flag document functionality
+  $('.flag-document').on('click', function() {
+    console.log("Flag document clicked");
+    var documentId = $(this).data('id');
+    $('#documentId').val(documentId);
+    $('#flagDocumentModal').modal('show');
+  });
+  
+  // Delete document functionality
+  $('.delete-document').on('click', function() {
+    console.log("Delete document clicked");
+    var documentId = $(this).data('id');
+    $('#deleteDocumentId').val(documentId);
+    $('#deleteDocumentModal').modal('show');
+  });
+  
+  // Unflag document functionality
+  $('.unflag-document').on('click', function() {
+    if (confirm('Are you sure you want to remove the flag from this document?')) {
+      console.log("Unflagging document");
       var documentId = $(this).data('id');
-      $('#documentId').val(documentId);
-      $('#flagDocumentModal').modal('show');
-    });
-    
-    // Delete document
-    $('.delete-document').on('click', function() {
-      var documentId = $(this).data('id');
-      $('#deleteDocumentId').val(documentId);
-      $('#deleteDocumentModal').modal('show');
-    });
-    
-    // Unflag document
-    $('.unflag-document').on('click', function() {
-      if (confirm('Are you sure you want to remove the flag from this document?')) {
-        var documentId = $(this).data('id');
-        
-        $.ajax({
-          url: 'process-unflag-document.php',
-          type: 'POST',
-          data: { documentId: documentId },
-          success: function(response) {
-            location.reload();
-          },
-          error: function() {
-            alert('Error unflagging document. Please try again.');
-          }
-        });
-      }
-    });
-    
-    // Restore document
-    $('.restore-document').on('click', function() {
-      if (confirm('Are you sure you want to restore this document?')) {
-        var documentId = $(this).data('id');
-        
-        $.ajax({
-          url: 'process-restore-document.php',
-          type: 'POST',
-          data: { documentId: documentId },
-          success: function(response) {
-            location.reload();
-          },
-          error: function() {
-            alert('Error restoring document. Please try again.');
-          }
-        });
-      }
-    });
-
-    // Search and filtering functionality
-    function applyFilters() {
-      var fileType = $('#file-type-filter').val().toLowerCase();
-      var accessLevel = $('#access-level-filter').val();
-      var status = $('#status-filter').val();
-      var dateFilter = $('#date-filter').val();
-      var searchText = $('#search-input').val().toLowerCase();
       
-      $('.document-row').each(function() {
-        var row = $(this);
-        var docId = row.find('td:nth-child(1)').text().toLowerCase();
-        var title = row.find('td:nth-child(2)').text().toLowerCase();
-        var type = row.find('td:nth-child(3)').text().toLowerCase();
-        var owner = row.find('td:nth-child(4)').text().toLowerCase();
-        var accessLevelText = row.find('td:nth-child(5)').text();
-        var date = row.find('td:nth-child(6)').text();
-        var statusText = row.find('td:nth-child(7)').text();
-        
-        // Check file type filter
-        var typeMatch = (fileType === '' || type.indexOf(fileType) > -1);
-        
-        // Check access level filter
-        var accessLevelMatch = (accessLevel === '' || accessLevelText.indexOf('Level ' + accessLevel) > -1);
-        
-        // Check status filter
-        var statusMatch = (status === '' || statusText === status);
-        
-        // Check date filter
-        var dateMatch = true;
-        if (dateFilter !== '') {
-          var uploadDate = new Date(date);
-          var today = new Date();
-          
-          if (dateFilter === 'today') {
-            dateMatch = uploadDate.toDateString() === today.toDateString();
-          } else if (dateFilter === 'week') {
-            var weekAgo = new Date();
-            weekAgo.setDate(today.getDate() - 7);
-            dateMatch = uploadDate >= weekAgo;
-          } else if (dateFilter === 'month') {
-            var monthAgo = new Date();
-            monthAgo.setMonth(today.getMonth() - 1);
-            dateMatch = uploadDate >= monthAgo;
-          } else if (dateFilter === 'year') {
-            var yearAgo = new Date();
-            yearAgo.setFullYear(today.getFullYear() - 1);
-            dateMatch = uploadDate >= yearAgo;
-          }
-        }
-        
-        // Check search text (partial matching in multiple columns)
-        var searchMatch = (searchText === '' || 
-                          docId.indexOf(searchText) > -1 ||
-                          title.indexOf(searchText) > -1 || 
-                          type.indexOf(searchText) > -1 || 
-                          owner.indexOf(searchText) > -1 ||
-                          accessLevelText.toLowerCase().indexOf(searchText) > -1 ||
-                          date.toLowerCase().indexOf(searchText) > -1 ||
-                          statusText.toLowerCase().indexOf(searchText) > -1);
-        
-        // Show/hide row based on combined filters
-        if (typeMatch && accessLevelMatch && statusMatch && dateMatch && searchMatch) {
-          row.show();
-        } else {
-          row.hide();
+      $.ajax({
+        url: 'process-unflag-document.php',
+        type: 'POST',
+        data: { documentId: documentId },
+        success: function(response) {
+          location.reload();
+        },
+        error: function() {
+          alert('Error unflagging document. Please try again.');
         }
       });
-      
-      // Show message if no rows are visible
-      var visibleRows = $('.document-row:visible').length;
-      if (visibleRows === 0 && $('.document-row').length > 0) {
-        // If we already have a "no results" message, don't add another one
-        if ($('#no-results-message').length === 0) {
-          $('#documents-table tbody').append(
-            '<tr id="no-results-message"><td colspan="8" class="text-center">No documents match your search criteria.</td></tr>'
-          );
-        }
-      } else {
-        // Remove the "no results" message if there are visible rows
-        $('#no-results-message').remove();
-      }
     }
+  });
+  
+  // Restore document functionality
+  $('.restore-document').on('click', function() {
+    if (confirm('Are you sure you want to restore this document?')) {
+      console.log("Restoring document");
+      var documentId = $(this).data('id');
+      
+      $.ajax({
+        url: 'process-restore-document.php',
+        type: 'POST',
+        data: { documentId: documentId },
+        success: function(response) {
+          location.reload();
+        },
+        error: function() {
+          alert('Error restoring document. Please try again.');
+        }
+      });
+    }
+  });
+
+  // Search and filtering functionality
+  function applyFilters() {
+    console.log("Applying filters");
+    var fileType = $('#file-type-filter').val().toLowerCase();
+    var accessLevel = $('#access-level-filter').val();
+    var status = $('#status-filter').val();
+    var dateFilter = $('#date-filter').val();
+    var searchText = $('#search-input').val().toLowerCase();
     
-    // Apply filters when input changes
-    $('#file-type-filter, #access-level-filter, #status-filter, #date-filter').on('change', function() {
-      applyFilters();
-    });
+    console.log("File type: " + fileType);
+    console.log("Access level: " + accessLevel);
+    console.log("Status: " + status);
+    console.log("Date filter: " + dateFilter);
+    console.log("Search text: " + searchText);
     
-    // Apply filters when search button is clicked
-    $('#search-btn').on('click', function() {
-      applyFilters();
-    });
-    
-    // Apply filters when Enter key is pressed in search input
-    $('#search-input').on('keyup', function(e) {
-      if (e.keyCode === 13) { // Enter key
-        applyFilters();
+    $('.document-row').each(function() {
+      var row = $(this);
+      var docId = row.find('td:nth-child(1)').text().toLowerCase();
+      var title = row.find('td:nth-child(2)').text().toLowerCase();
+      var type = row.find('td:nth-child(3)').text().toLowerCase();
+      var owner = row.find('td:nth-child(4)').text().toLowerCase();
+      var accessLevelText = row.find('td:nth-child(5)').text();
+      var date = row.find('td:nth-child(6)').text();
+      var statusText = row.find('td:nth-child(7)').text();
+      
+      // Check file type filter
+      var typeMatch = (fileType === '' || type.indexOf(fileType) > -1);
+      
+      // Check access level filter
+      var accessLevelMatch = (accessLevel === '' || accessLevelText.indexOf('Level ' + accessLevel) > -1);
+      
+      // Check status filter
+      var statusMatch = (status === '' || statusText === status);
+      
+      // Check date filter
+      var dateMatch = true;
+      if (dateFilter !== '') {
+        var uploadDate = new Date(date);
+        var today = new Date();
+        
+        if (dateFilter === 'today') {
+          dateMatch = uploadDate.toDateString() === today.toDateString();
+        } else if (dateFilter === 'week') {
+          var weekAgo = new Date();
+          weekAgo.setDate(today.getDate() - 7);
+          dateMatch = uploadDate >= weekAgo;
+        } else if (dateFilter === 'month') {
+          var monthAgo = new Date();
+          monthAgo.setMonth(today.getMonth() - 1);
+          dateMatch = uploadDate >= monthAgo;
+        } else if (dateFilter === 'year') {
+          var yearAgo = new Date();
+          yearAgo.setFullYear(today.getFullYear() - 1);
+          dateMatch = uploadDate >= yearAgo;
+        }
+      }
+      
+      // Check search text (partial matching in multiple columns)
+      var searchMatch = (searchText === '' || 
+                        docId.indexOf(searchText) > -1 ||
+                        title.indexOf(searchText) > -1 || 
+                        type.indexOf(searchText) > -1 || 
+                        owner.indexOf(searchText) > -1 ||
+                        accessLevelText.toLowerCase().indexOf(searchText) > -1 ||
+                        date.toLowerCase().indexOf(searchText) > -1 ||
+                        statusText.toLowerCase().indexOf(searchText) > -1);
+      
+      console.log("Row " + title + ": Type match=" + typeMatch + ", Access match=" + accessLevelMatch + 
+                 ", Status match=" + statusMatch + ", Date match=" + dateMatch + ", Search match=" + searchMatch);
+      
+      // Show/hide row based on combined filters
+      if (typeMatch && accessLevelMatch && statusMatch && dateMatch && searchMatch) {
+        row.show();
+      } else {
+        row.hide();
       }
     });
     
-    // Clear all filters
-    $('#clear-filter-btn').on('click', function() {
-      $('#file-type-filter').val('');
-      $('#access-level-filter').val('');
-      $('#status-filter').val('');
-      $('#date-filter').val('');
-      $('#search-input').val('');
-      applyFilters();
-    });
+    // Show message if no rows are visible
+    var visibleRows = $('.document-row:visible').length;
+    console.log("Visible rows: " + visibleRows);
+    
+    if (visibleRows === 0 && $('.document-row').length > 0) {
+      // If we already have a "no results" message, don't add another one
+      if ($('#no-results-message').length === 0) {
+        $('#documents-table tbody').append(
+          '<tr id="no-results-message"><td colspan="8" class="text-center">No documents match your search criteria. <button type="button" id="clear-filters-msg" class="btn btn-link p-0">Clear filters</button></td></tr>'
+        );
+        
+        // Add click handler for the "Clear filters" button in message
+        $('#clear-filters-msg').on('click', function() {
+          clearFilters();
+        });
+      }
+    } else {
+      // Remove the "no results" message if there are visible rows
+      $('#no-results-message').remove();
+    }
+  }
+  
+  // Function to clear all filters
+  function clearFilters() {
+    console.log("Clearing all filters");
+    $('#file-type-filter').val('');
+    $('#access-level-filter').val('');
+    $('#status-filter').val('');
+    $('#date-filter').val('');
+    $('#search-input').val('');
+    applyFilters();
+  }
+  
+  // Add manual event handlers for all filter changes
+  document.getElementById('file-type-filter').addEventListener('change', function() {
+    console.log("File type filter changed");
+    applyFilters();
   });
+  
+  document.getElementById('access-level-filter').addEventListener('change', function() {
+    console.log("Access level filter changed");
+    applyFilters();
+  });
+  
+  document.getElementById('status-filter').addEventListener('change', function() {
+    console.log("Status filter changed");
+    applyFilters();
+  });
+  
+  document.getElementById('date-filter').addEventListener('change', function() {
+    console.log("Date filter changed");
+    applyFilters();
+  });
+  
+  document.getElementById('search-btn').addEventListener('click', function() {
+    console.log("Search button clicked");
+    applyFilters();
+  });
+  
+  document.getElementById('search-input').addEventListener('keyup', function(e) {
+    if (e.keyCode === 13) { // Enter key
+      console.log("Enter key pressed in search input");
+      applyFilters();
+    }
+  });
+  
+  document.getElementById('clear-filter-btn').addEventListener('click', function() {
+    console.log("Clear filters button clicked");
+    clearFilters();
+  });
+  
+  console.log("Document management functionality initialized");
+});
 </script>
 
 <?php

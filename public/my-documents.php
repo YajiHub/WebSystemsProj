@@ -88,6 +88,7 @@ function formatFileSize($bytes) {
                   <input type="text" class="form-control" id="search-input" placeholder="Search documents...">
                   <div class="input-group-append">
                     <button class="btn btn-primary" id="search-btn" type="button">Search</button>
+                    <button class="btn btn-secondary" id="clear-btn" type="button">Clear</button>
                   </div>
                 </div>
               </div>
@@ -113,7 +114,7 @@ function formatFileSize($bytes) {
                     <th>Actions</th>
                   </tr>  
                 </thead>
-                <tbody>
+                <tbody id="documents-tbody">
                   <?php if (empty($documents)): ?>
                     <tr>
                       <td colspan="5" class="text-center">No documents found. <a href="upload.php">Upload your first document</a>.</td>
@@ -188,113 +189,196 @@ function formatFileSize($bytes) {
     </div>
   </div>
 
+<!-- Add this script at the end, right before closing the body tag -->
 <script>
-  // Script for delete confirmation and search functionality
-  $(document).ready(function() {
-    // Handle delete confirmation
-    $('.delete-doc').on('click', function(e) {
+// Strict mode to catch common JavaScript errors
+'use strict';
+
+// Wait for page to fully load
+document.addEventListener('DOMContentLoaded', function() {
+  // For debugging
+  console.log('Document ready, initializing search functionality');
+  
+  // Get DOM elements
+  var typeFilterElement = document.getElementById('type-filter');
+  var dateFilterElement = document.getElementById('date-filter');
+  var searchInputElement = document.getElementById('search-input');
+  var searchBtnElement = document.getElementById('search-btn');
+  var clearBtnElement = document.getElementById('clear-btn');
+  var documentRows = document.querySelectorAll('.document-row');
+  var tbody = document.getElementById('documents-tbody');
+  
+  // Handle delete confirmation
+  var deleteButtons = document.querySelectorAll('.delete-doc');
+  var confirmDeleteButton = document.getElementById('confirm-delete');
+  
+  deleteButtons.forEach(function(button) {
+    button.addEventListener('click', function(e) {
       e.preventDefault();
-      var deleteUrl = $(this).attr('href');
-      $('#confirm-delete').attr('href', deleteUrl);
+      var deleteUrl = this.getAttribute('href');
+      confirmDeleteButton.setAttribute('href', deleteUrl);
       $('#deleteModal').modal('show');
     });
+  });
+  
+  // Function to filter documents
+  function applyFilters() {
+    console.log('Applying filters...');
     
-    // Apply filters and search when filters change
-    $('#type-filter, #date-filter').on('change', function() {
-      applyFilters();
+    // Get filter values
+    var typeFilter = typeFilterElement.value.toLowerCase();
+    var dateFilter = dateFilterElement.value;
+    var searchText = searchInputElement.value.toLowerCase();
+    
+    console.log('Type filter:', typeFilter);
+    console.log('Date filter:', dateFilter);
+    console.log('Search text:', searchText);
+    
+    // Track if we have any visible rows
+    var visibleRowCount = 0;
+    
+    // Process each document row
+    documentRows.forEach(function(row) {
+      // Get values from columns
+      var title = row.cells[0].textContent.toLowerCase();
+      var type = row.cells[1].textContent.toLowerCase();
+      var size = row.cells[2].textContent.toLowerCase();
+      var dateStr = row.cells[3].textContent;
+      
+      // Check if type matches filter
+      var typeMatch = (typeFilter === '' || type.indexOf(typeFilter) !== -1);
+      
+      // Check if date matches filter
+      var dateMatch = true;
+      if (dateFilter !== '') {
+        var uploadDate = new Date(dateStr);
+        var today = new Date();
+        
+        if (dateFilter === 'today') {
+          dateMatch = uploadDate.toDateString() === today.toDateString();
+        } else if (dateFilter === 'week') {
+          var weekAgo = new Date();
+          weekAgo.setDate(today.getDate() - 7);
+          dateMatch = uploadDate >= weekAgo;
+        } else if (dateFilter === 'month') {
+          var monthAgo = new Date();
+          monthAgo.setMonth(today.getMonth() - 1);
+          dateMatch = uploadDate >= monthAgo;
+        } else if (dateFilter === 'year') {
+          var yearAgo = new Date();
+          yearAgo.setFullYear(today.getFullYear() - 1);
+          dateMatch = uploadDate >= yearAgo;
+        }
+      }
+      
+      // Check if any field matches search text (partial matching)
+      var searchMatch = (searchText === '' || 
+                        title.indexOf(searchText) !== -1 || 
+                        type.indexOf(searchText) !== -1 || 
+                        size.indexOf(searchText) !== -1 || 
+                        dateStr.toLowerCase().indexOf(searchText) !== -1);
+      
+      // Determine if this row should be visible
+      var shouldBeVisible = typeMatch && dateMatch && searchMatch;
+      
+      // Show or hide row
+      row.style.display = shouldBeVisible ? '' : 'none';
+      
+      // Count visible rows
+      if (shouldBeVisible) {
+        visibleRowCount++;
+      }
+      
+      console.log('Row:', title, '- Visible:', shouldBeVisible);
     });
     
-    // Apply filters and search when search button is clicked
-    $('#search-btn').on('click', function() {
+    console.log('Visible rows:', visibleRowCount);
+    
+    // Remove any existing "no results" message
+    var noResultsRow = document.getElementById('no-results-message');
+    if (noResultsRow) {
+      noResultsRow.parentNode.removeChild(noResultsRow);
+    }
+    
+    // Show "no results" message if needed
+    if (visibleRowCount === 0 && documentRows.length > 0) {
+      var noResultsRow = document.createElement('tr');
+      noResultsRow.id = 'no-results-message';
+      
+      var noResultsCell = document.createElement('td');
+      noResultsCell.colSpan = 5;
+      noResultsCell.className = 'text-center';
+      noResultsCell.innerHTML = 'No documents match your search criteria. <button type="button" id="clear-filters-message" class="btn btn-link p-0">Clear filters</button>';
+      
+      noResultsRow.appendChild(noResultsCell);
+      tbody.appendChild(noResultsRow);
+      
+      // Add click handler for the "Clear filters" button in message
+      document.getElementById('clear-filters-message').addEventListener('click', function() {
+        clearFilters();
+      });
+    }
+  }
+  
+  // Function to clear all filters
+  function clearFilters() {
+    console.log('Clearing all filters');
+    typeFilterElement.value = '';
+    dateFilterElement.value = '';
+    searchInputElement.value = '';
+    applyFilters();
+  }
+  
+  // Add event listeners
+  if (typeFilterElement) {
+    typeFilterElement.addEventListener('change', function() {
+      console.log('Type filter changed');
       applyFilters();
     });
-    
-    // Apply filters and search when Enter key is pressed in search input
-    $('#search-input').on('keyup', function(e) {
+  } else {
+    console.error('Type filter element not found!');
+  }
+  
+  if (dateFilterElement) {
+    dateFilterElement.addEventListener('change', function() {
+      console.log('Date filter changed');
+      applyFilters();
+    });
+  } else {
+    console.error('Date filter element not found!');
+  }
+  
+  if (searchBtnElement) {
+    searchBtnElement.addEventListener('click', function() {
+      console.log('Search button clicked');
+      applyFilters();
+    });
+  } else {
+    console.error('Search button element not found!');
+  }
+  
+  if (searchInputElement) {
+    searchInputElement.addEventListener('keyup', function(e) {
       if (e.keyCode === 13) { // Enter key
+        console.log('Enter key pressed in search input');
         applyFilters();
       }
     });
-    
-    // Function to apply filters and search
-    function applyFilters() {
-      var typeFilter = $('#type-filter').val().toLowerCase();
-      var dateFilter = $('#date-filter').val();
-      var searchText = $('#search-input').val().toLowerCase();
-      
-      // Show/hide rows based on filters
-      $('.document-row').each(function() {
-        var row = $(this);
-        var title = row.find('td:nth-child(1)').text().toLowerCase();
-        var type = row.find('td:nth-child(2)').text().toLowerCase();
-        var size = row.find('td:nth-child(3)').text().toLowerCase();
-        var date = row.find('td:nth-child(4)').text();
-        
-        // Check if type matches filter
-        var typeMatch = (typeFilter === '' || type.indexOf(typeFilter) > -1);
-        
-        // Check if date matches filter
-        var dateMatch = true;
-        if (dateFilter !== '') {
-          var uploadDate = new Date(date);
-          var today = new Date();
-          
-          if (dateFilter === 'today') {
-            dateMatch = uploadDate.toDateString() === today.toDateString();
-          } else if (dateFilter === 'week') {
-            var weekAgo = new Date();
-            weekAgo.setDate(today.getDate() - 7);
-            dateMatch = uploadDate >= weekAgo;
-          } else if (dateFilter === 'month') {
-            var monthAgo = new Date();
-            monthAgo.setMonth(today.getMonth() - 1);
-            dateMatch = uploadDate >= monthAgo;
-          } else if (dateFilter === 'year') {
-            var yearAgo = new Date();
-            yearAgo.setFullYear(today.getFullYear() - 1);
-            dateMatch = uploadDate >= yearAgo;
-          }
-        }
-        
-        // Check if any field matches search text (partial matching)
-        var searchMatch = (searchText === '' || 
-                          title.indexOf(searchText) > -1 || 
-                          type.indexOf(searchText) > -1 || 
-                          size.indexOf(searchText) > -1 || 
-                          date.toLowerCase().indexOf(searchText) > -1);
-        
-        // Show/hide row based on combined filters
-        if (typeMatch && dateMatch && searchMatch) {
-          row.show();
-        } else {
-          row.hide();
-        }
-      });
-      
-      // Show message if no rows are visible
-      var visibleRows = $('.document-row:visible').length;
-      if (visibleRows === 0 && $('.document-row').length > 0) {
-        // If we already have a "no results" message, don't add another one
-        if ($('#no-results-message').length === 0) {
-          $('#documents-table tbody').append(
-            '<tr id="no-results-message"><td colspan="5" class="text-center">No documents match your search criteria. <a href="#" id="clear-filters">Clear filters</a></td></tr>'
-          );
-          
-          // Add click handler for the "Clear filters" link
-          $('#clear-filters').on('click', function(e) {
-            e.preventDefault();
-            $('#type-filter').val('');
-            $('#date-filter').val('');
-            $('#search-input').val('');
-            applyFilters();
-          });
-        }
-      } else {
-        // Remove the "no results" message if there are visible rows
-        $('#no-results-message').remove();
-      }
-    }
-  });
+  } else {
+    console.error('Search input element not found!');
+  }
+  
+  if (clearBtnElement) {
+    clearBtnElement.addEventListener('click', function() {
+      console.log('Clear button clicked');
+      clearFilters();
+    });
+  } else {
+    console.error('Clear button element not found!');
+  }
+  
+  console.log('Search functionality initialized');
+});
 </script>
 
 <?php
