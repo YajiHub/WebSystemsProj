@@ -1,6 +1,4 @@
 <?php
-// File: admin/upload-for-user.php
-// Include session management
 require_once '../public/include/session.php';
 
 // Include database functions

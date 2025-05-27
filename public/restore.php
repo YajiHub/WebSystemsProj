@@ -1,6 +1,4 @@
 <?php
-// File: public/restore.php
-// Include session management
 require_once 'include/session.php';
 
 // Require login

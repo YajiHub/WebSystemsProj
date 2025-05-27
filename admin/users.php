@@ -1,5 +1,4 @@
 <?php
-// // File: admin/users.php
 // session_start();
 
 // // Check if user is logged in and is admin

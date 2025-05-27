@@ -1,5 +1,4 @@
 <?php
-// File: admin/process-add-access-level.php
 require_once '../public/include/session.php';
 requireAdmin();
 

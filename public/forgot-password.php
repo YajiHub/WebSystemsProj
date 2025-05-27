@@ -1,5 +1,4 @@
 <?php
-// File: public/forgot-password.php
 session_start();
 
 // Check if user is already logged in

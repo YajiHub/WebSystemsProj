@@ -1,5 +1,4 @@
 <?php
-// File: admin/process-delete-access-level.php
 require_once '../public/include/session.php';
 requireAdmin();
 

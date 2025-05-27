@@ -1,5 +1,4 @@
 <?php
-// Include session management
 require_once 'include/session.php';
 
 // Check if form was submitted

@@ -1,5 +1,4 @@
 <?php
-// File: admin/view-user.php
 require_once '../public/include/session.php';
 
 // Require admin login

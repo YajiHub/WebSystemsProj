@@ -1,6 +1,3 @@
-<?php
-// File: public/include/sidebar.php
-?>
 <!-- Main Content Area -->
 <div class="container-fluid page-body-wrapper">
   <!-- Sidebar -->

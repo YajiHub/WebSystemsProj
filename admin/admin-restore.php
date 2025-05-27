@@ -1,6 +1,4 @@
 <?php
-// File: admin/admin-restore.php
-// Include session management
 require_once '../public/include/session.php';
 
 // Require admin login

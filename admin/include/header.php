@@ -1,5 +1,4 @@
 <?php
-// File: admin/include/header.php
 // Include session management to get current user info
 require_once '../public/include/session.php';
 

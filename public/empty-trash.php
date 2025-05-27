@@ -1,6 +1,4 @@
 <?php
-// File: public/empty-trash.php
-// Include session management
 require_once 'include/session.php';
 
 // Require login

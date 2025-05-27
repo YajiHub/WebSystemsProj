@@ -1,5 +1,4 @@
 <?php
-// File: admin/manage-documents.php
 require_once '../public/include/session.php';
 
 // Require admin login
