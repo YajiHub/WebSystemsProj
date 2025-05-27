@@ -32,6 +32,23 @@ if (!hasDocumentAccess($conn, $_SESSION['user_id'], $documentId)) {
     exit;
 }
 
+// Get uploader information from access logs
+$uploader = null;
+$sql = "SELECT u.UserID, u.FirstName, u.LastName, u.UserRole, f.Timestamp 
+        FROM fileaccesslog f 
+        JOIN user u ON f.UserID = u.UserID 
+        WHERE f.DocumentID = ? AND f.AccessType = 3 
+        ORDER BY f.Timestamp ASC 
+        LIMIT 1";
+$stmt = mysqli_prepare($conn, $sql);
+mysqli_stmt_bind_param($stmt, "i", $documentId);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
+
+if ($result && mysqli_num_rows($result) > 0) {
+    $uploader = mysqli_fetch_assoc($result);
+}
+
 // Log the view action
 $viewAccessTypeId = 1; // Assuming 1 is the ID for 'View' in accesstype table
 logFileAccess($conn, $_SESSION['user_id'], $documentId, $viewAccessTypeId);
@@ -80,8 +97,16 @@ $fileSize = file_exists($filePath) ? filesize($filePath) : 0;
                   <h4 class="mb-0"><?php echo htmlspecialchars($document['Title']); ?></h4>
                   <div class="text-muted small">
                     <?php echo strtoupper($fileType); ?> · <?php echo formatFileSize($fileSize); ?> · 
-                    Uploaded <?php echo date('M d, Y', strtotime($document['UploadDate'])); ?> by 
-                    <?php echo htmlspecialchars($document['FirstName'] . ' ' . $document['LastName']); ?>
+                    <?php 
+                    if ($uploader && $uploader['UserID'] != $document['UserID']) {
+                        echo 'Uploaded by <span class="text-primary font-weight-bold">' . 
+                             htmlspecialchars($uploader['FirstName'] . ' ' . $uploader['LastName']) . 
+                             '</span> (' . ($uploader['UserRole'] == 'admin' ? 'Administrator' : 'User') . ') on ';
+                    } else {
+                        echo 'Uploaded on ';
+                    }
+                    echo date('M d, Y', strtotime($document['UploadDate'])); 
+                    ?>
                   </div>
                 </div>
               </div>
@@ -188,9 +213,21 @@ $fileSize = file_exists($filePath) ? filesize($filePath) : 0;
               </div>
               
               <div class="mb-3">
-                <label class="text-muted d-block">Uploaded By</label>
+                <label class="text-muted d-block">Document Owner</label>
                 <span><?php echo htmlspecialchars($document['FirstName'] . ' ' . $document['LastName']); ?></span>
               </div>
+              
+              <?php if ($uploader && $uploader['UserID'] != $document['UserID']): ?>
+              <div class="mb-3">
+                <label class="text-muted d-block">Uploaded By</label>
+                <span class="text-primary">
+                  <?php echo htmlspecialchars($uploader['FirstName'] . ' ' . $uploader['LastName']); ?> 
+                  <span class="badge badge-primary">
+                    <?php echo ucfirst($uploader['UserRole']); ?>
+                  </span>
+                </span>
+              </div>
+              <?php endif; ?>
             </div>
             
             <?php if (!empty($document['FileTypeDescription'])): ?>

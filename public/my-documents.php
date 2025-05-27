@@ -9,6 +9,29 @@ requireLogin();
 // Get user's documents
 $documents = getDocumentsByUserId($conn, $_SESSION['user_id']);
 
+// For each document, check if it was uploaded by an admin
+foreach ($documents as &$doc) {
+    // Get uploader information from access logs
+    $sql = "SELECT u.UserID, u.FirstName, u.LastName, u.UserRole, f.Timestamp 
+            FROM fileaccesslog f 
+            JOIN user u ON f.UserID = u.UserID 
+            WHERE f.DocumentID = ? AND f.AccessType = 3 
+            ORDER BY f.Timestamp ASC 
+            LIMIT 1";
+    $stmt = mysqli_prepare($conn, $sql);
+    mysqli_stmt_bind_param($stmt, "i", $doc['DocumentID']);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+
+    if ($result && mysqli_num_rows($result) > 0) {
+        $uploader = mysqli_fetch_assoc($result);
+        if ($uploader['UserID'] != $_SESSION['user_id']) {
+            $doc['UploadedBy'] = $uploader;
+        }
+    }
+}
+unset($doc); // Break the reference
+
 include 'include/header.php';
 include 'include/sidebar.php';
 
@@ -110,7 +133,7 @@ function formatFileSize($bytes) {
                     <th>Document Name</th>
                     <th>Type</th>
                     <th>Size</th>
-                    <th>Uploaded Date</th>
+                    <th>Uploaded</th>
                     <th>Actions</th>
                   </tr>  
                 </thead>
@@ -122,9 +145,17 @@ function formatFileSize($bytes) {
                   <?php else: ?>
                     <?php foreach ($documents as $doc): ?>
                       <tr class="document-row">
-                        <td><?php echo htmlspecialchars($doc['Title']); ?></td>
+                        <td>
+                          <?php echo htmlspecialchars($doc['Title']); ?>
+                          <?php if (isset($doc['UploadedBy'])): ?>
+                            <div class="small text-primary">
+                              <i class="ti-info-alt"></i> Uploaded by <?php echo htmlspecialchars($doc['UploadedBy']['FirstName'] . ' ' . $doc['UploadedBy']['LastName']); ?> 
+                              (<?php echo ucfirst($doc['UploadedBy']['UserRole']); ?>)
+                            </div>
+                          <?php endif; ?>
+                        </td>
                         <td><span class="badge badge-info"><?php echo strtoupper($doc['FileType']); ?></span></td>
-                        <td><?php echo formatFileSize(filesize($doc['FileLocation'])); ?></td>
+                        <td><?php echo formatFileSize(file_exists($doc['FileLocation']) ? filesize($doc['FileLocation']) : 0); ?></td>
                         <td><?php echo date('Y-m-d H:i', strtotime($doc['UploadDate'])); ?></td>
                         <td>
                           <a href="view.php?id=<?php echo $doc['DocumentID']; ?>" class="btn btn-dark btn-icon-text btn-sm">

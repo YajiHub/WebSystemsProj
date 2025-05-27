@@ -151,7 +151,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($documentId) {
             // Log the upload action by the admin
             $uploadAccessTypeId = 3; // Assuming 3 is the ID for 'Upload' in accesstype table
+            
+            // Important: Log that the admin (not the user) performed this upload
+            // This will be used to show who actually uploaded the file
             logFileAccess($conn, $_SESSION['user_id'], $documentId, $uploadAccessTypeId);
+            
+            // Add a note about the upload in the document description if one wasn't provided
+            if (empty($description)) {
+                $adminInfo = getUserById($conn, $_SESSION['user_id']);
+                $adminName = $adminInfo['FirstName'] . ' ' . $adminInfo['LastName'];
+                $updateSql = "UPDATE document SET FileTypeDescription = CONCAT('Uploaded by admin: ', ?) WHERE DocumentID = ?";
+                $updateStmt = mysqli_prepare($conn, $updateSql);
+                mysqli_stmt_bind_param($updateStmt, "si", $adminName, $documentId);
+                mysqli_stmt_execute($updateStmt);
+                mysqli_stmt_close($updateStmt);
+            }
             
             // TODO: If notification is enabled, add code to notify the user here
             // This could be done via email or an internal notification system
