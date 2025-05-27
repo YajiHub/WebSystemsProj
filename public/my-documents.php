@@ -120,7 +120,7 @@ function formatFileSize($bytes) {
                     </tr>
                   <?php else: ?>
                     <?php foreach ($documents as $doc): ?>
-                      <tr>
+                      <tr class="document-row">
                         <td><?php echo htmlspecialchars($doc['Title']); ?></td>
                         <td><span class="badge badge-info"><?php echo strtoupper($doc['FileType']); ?></span></td>
                         <td><?php echo formatFileSize(filesize($doc['FileLocation'])); ?></td>
@@ -189,8 +189,9 @@ function formatFileSize($bytes) {
   </div>
 
 <script>
-  // Script for delete confirmation
+  // Script for delete confirmation and search functionality
   $(document).ready(function() {
+    // Handle delete confirmation
     $('.delete-doc').on('click', function(e) {
       e.preventDefault();
       var deleteUrl = $(this).attr('href');
@@ -198,41 +199,42 @@ function formatFileSize($bytes) {
       $('#deleteModal').modal('show');
     });
     
-    // Filter functionality
+    // Apply filters and search when filters change
     $('#type-filter, #date-filter').on('change', function() {
-      filterTable();
+      applyFilters();
     });
     
+    // Apply filters and search when search button is clicked
     $('#search-btn').on('click', function() {
-      filterTable();
+      applyFilters();
     });
     
-    $('#search-input').on('keyup', function(e) {
-      if (e  {
-      filterTable();
-    });
-    
+    // Apply filters and search when Enter key is pressed in search input
     $('#search-input').on('keyup', function(e) {
       if (e.keyCode === 13) { // Enter key
-        filterTable();
+        applyFilters();
       }
     });
     
-    function filterTable() {
+    // Function to apply filters and search
+    function applyFilters() {
       var typeFilter = $('#type-filter').val().toLowerCase();
       var dateFilter = $('#date-filter').val();
       var searchText = $('#search-input').val().toLowerCase();
       
-      $('#documents-table tbody tr').each(function() {
+      // Show/hide rows based on filters
+      $('.document-row').each(function() {
         var row = $(this);
-        var type = row.find('td:nth-child(2)').text().toLowerCase();
-        var date = row.find('td:nth-child(4)').text();
         var title = row.find('td:nth-child(1)').text().toLowerCase();
+        var type = row.find('td:nth-child(2)').text().toLowerCase();
+        var size = row.find('td:nth-child(3)').text().toLowerCase();
+        var date = row.find('td:nth-child(4)').text();
         
-        var typeMatch = typeFilter === '' || type.includes(typeFilter);
+        // Check if type matches filter
+        var typeMatch = (typeFilter === '' || type.indexOf(typeFilter) > -1);
+        
+        // Check if date matches filter
         var dateMatch = true;
-        
-        // Date filtering logic
         if (dateFilter !== '') {
           var uploadDate = new Date(date);
           var today = new Date();
@@ -254,14 +256,43 @@ function formatFileSize($bytes) {
           }
         }
         
-        var searchMatch = searchText === '' || title.includes(searchText);
+        // Check if any field matches search text (partial matching)
+        var searchMatch = (searchText === '' || 
+                          title.indexOf(searchText) > -1 || 
+                          type.indexOf(searchText) > -1 || 
+                          size.indexOf(searchText) > -1 || 
+                          date.toLowerCase().indexOf(searchText) > -1);
         
+        // Show/hide row based on combined filters
         if (typeMatch && dateMatch && searchMatch) {
           row.show();
         } else {
           row.hide();
         }
       });
+      
+      // Show message if no rows are visible
+      var visibleRows = $('.document-row:visible').length;
+      if (visibleRows === 0 && $('.document-row').length > 0) {
+        // If we already have a "no results" message, don't add another one
+        if ($('#no-results-message').length === 0) {
+          $('#documents-table tbody').append(
+            '<tr id="no-results-message"><td colspan="5" class="text-center">No documents match your search criteria. <a href="#" id="clear-filters">Clear filters</a></td></tr>'
+          );
+          
+          // Add click handler for the "Clear filters" link
+          $('#clear-filters').on('click', function(e) {
+            e.preventDefault();
+            $('#type-filter').val('');
+            $('#date-filter').val('');
+            $('#search-input').val('');
+            applyFilters();
+          });
+        }
+      } else {
+        // Remove the "no results" message if there are visible rows
+        $('#no-results-message').remove();
+      }
     }
   });
 </script>

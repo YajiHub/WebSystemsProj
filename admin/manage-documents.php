@@ -112,6 +112,7 @@ include 'include/admin-sidebar.php';
                   <input type="text" class="form-control" id="search-input" placeholder="Search documents...">
                   <div class="input-group-append">
                     <button class="btn btn-primary" type="button" id="search-btn">Search</button>
+                    <button class="btn btn-secondary" type="button" id="clear-filter-btn">Clear</button>
                   </div>
                 </div>
               </div>
@@ -157,7 +158,7 @@ include 'include/admin-sidebar.php';
                           break;
                       }
                       ?>
-                      <tr>
+                      <tr class="document-row">
                         <td><?php echo $doc['DocumentID']; ?></td>
                         <td><?php echo htmlspecialchars($doc['Title']); ?></td>
                         <td><span class="badge badge-info"><?php echo strtoupper($doc['FileType']); ?></span></td>
@@ -277,64 +278,6 @@ include 'include/admin-sidebar.php';
 
 <script>
   $(document).ready(function() {
-    // Initialize DataTable
-    var table = $('#documents-table').DataTable({
-      "pageLength": 10,
-      "lengthMenu": [10, 25, 50, 100],
-      "order": [[ 0, "desc" ]],
-      "language": {
-        "search": "Search:",
-        "lengthMenu": "Show _MENU_ entries per page",
-        "info": "Showing _START_ to _END_ of _TOTAL_ entries",
-        "infoEmpty": "Showing 0 to 0 of 0 entries",
-        "infoFiltered": "(filtered from _MAX_ total entries)"
-      }
-    });
-
-    // Custom filters
-    $('#file-type-filter, #access-level-filter, #status-filter').on('change', function() {
-      var fileType = $('#file-type-filter').val();
-      var accessLevel = $('#access-level-filter').val();
-      var status = $('#status-filter').val();
-      
-      // Apply filters
-      table.columns(2).search(fileType).draw();
-      table.columns(4).search(accessLevel).draw();
-      table.columns(6).search(status).draw();
-    });
-
-    // Date filter
-    $('#date-filter').on('change', function() {
-      var dateFilter = $(this).val();
-      var today = new Date();
-      var filterDate = '';
-      
-      switch(dateFilter) {
-        case 'today':
-          filterDate = today.toISOString().split('T')[0];
-          break;
-        case 'week':
-          var weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-          filterDate = weekAgo.toISOString().split('T')[0];
-          break;
-        case 'month':
-          var monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
-          filterDate = monthAgo.toISOString().split('T')[0];
-          break;
-        case 'year':
-          var yearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
-          filterDate = yearAgo.toISOString().split('T')[0];
-          break;
-      }
-      
-      if (dateFilter === '') {
-        table.columns(5).search('').draw();
-      } else {
-        // This is a simplified date filter - you might want to implement more sophisticated date filtering
-        table.columns(5).search(filterDate).draw();
-      }
-    });
-
     // Flag document
     $('.flag-document').on('click', function() {
       var documentId = $(this).data('id');
@@ -385,6 +328,116 @@ include 'include/admin-sidebar.php';
           }
         });
       }
+    });
+
+    // Search and filtering functionality
+    function applyFilters() {
+      var fileType = $('#file-type-filter').val().toLowerCase();
+      var accessLevel = $('#access-level-filter').val();
+      var status = $('#status-filter').val();
+      var dateFilter = $('#date-filter').val();
+      var searchText = $('#search-input').val().toLowerCase();
+      
+      $('.document-row').each(function() {
+        var row = $(this);
+        var docId = row.find('td:nth-child(1)').text().toLowerCase();
+        var title = row.find('td:nth-child(2)').text().toLowerCase();
+        var type = row.find('td:nth-child(3)').text().toLowerCase();
+        var owner = row.find('td:nth-child(4)').text().toLowerCase();
+        var accessLevelText = row.find('td:nth-child(5)').text();
+        var date = row.find('td:nth-child(6)').text();
+        var statusText = row.find('td:nth-child(7)').text();
+        
+        // Check file type filter
+        var typeMatch = (fileType === '' || type.indexOf(fileType) > -1);
+        
+        // Check access level filter
+        var accessLevelMatch = (accessLevel === '' || accessLevelText.indexOf('Level ' + accessLevel) > -1);
+        
+        // Check status filter
+        var statusMatch = (status === '' || statusText === status);
+        
+        // Check date filter
+        var dateMatch = true;
+        if (dateFilter !== '') {
+          var uploadDate = new Date(date);
+          var today = new Date();
+          
+          if (dateFilter === 'today') {
+            dateMatch = uploadDate.toDateString() === today.toDateString();
+          } else if (dateFilter === 'week') {
+            var weekAgo = new Date();
+            weekAgo.setDate(today.getDate() - 7);
+            dateMatch = uploadDate >= weekAgo;
+          } else if (dateFilter === 'month') {
+            var monthAgo = new Date();
+            monthAgo.setMonth(today.getMonth() - 1);
+            dateMatch = uploadDate >= monthAgo;
+          } else if (dateFilter === 'year') {
+            var yearAgo = new Date();
+            yearAgo.setFullYear(today.getFullYear() - 1);
+            dateMatch = uploadDate >= yearAgo;
+          }
+        }
+        
+        // Check search text (partial matching in multiple columns)
+        var searchMatch = (searchText === '' || 
+                          docId.indexOf(searchText) > -1 ||
+                          title.indexOf(searchText) > -1 || 
+                          type.indexOf(searchText) > -1 || 
+                          owner.indexOf(searchText) > -1 ||
+                          accessLevelText.toLowerCase().indexOf(searchText) > -1 ||
+                          date.toLowerCase().indexOf(searchText) > -1 ||
+                          statusText.toLowerCase().indexOf(searchText) > -1);
+        
+        // Show/hide row based on combined filters
+        if (typeMatch && accessLevelMatch && statusMatch && dateMatch && searchMatch) {
+          row.show();
+        } else {
+          row.hide();
+        }
+      });
+      
+      // Show message if no rows are visible
+      var visibleRows = $('.document-row:visible').length;
+      if (visibleRows === 0 && $('.document-row').length > 0) {
+        // If we already have a "no results" message, don't add another one
+        if ($('#no-results-message').length === 0) {
+          $('#documents-table tbody').append(
+            '<tr id="no-results-message"><td colspan="8" class="text-center">No documents match your search criteria.</td></tr>'
+          );
+        }
+      } else {
+        // Remove the "no results" message if there are visible rows
+        $('#no-results-message').remove();
+      }
+    }
+    
+    // Apply filters when input changes
+    $('#file-type-filter, #access-level-filter, #status-filter, #date-filter').on('change', function() {
+      applyFilters();
+    });
+    
+    // Apply filters when search button is clicked
+    $('#search-btn').on('click', function() {
+      applyFilters();
+    });
+    
+    // Apply filters when Enter key is pressed in search input
+    $('#search-input').on('keyup', function(e) {
+      if (e.keyCode === 13) { // Enter key
+        applyFilters();
+      }
+    });
+    
+    // Clear all filters
+    $('#clear-filter-btn').on('click', function() {
+      $('#file-type-filter').val('');
+      $('#access-level-filter').val('');
+      $('#status-filter').val('');
+      $('#date-filter').val('');
+      $('#search-input').val('');
+      applyFilters();
     });
   });
 </script>
