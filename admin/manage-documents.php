@@ -74,10 +74,8 @@ include 'include/admin-sidebar.php';
                 <select class="form-control" id="file-type-filter">
                   <option value="">All Types</option>
                   <option value="pdf">PDF</option>
-                  <option value="png">PNG</option>
                   <option value="jpg">JPG</option>
-                  <option value="jpeg">JPEG</option>
-                  <option value="gif">GIF</option>
+                  <option value="png">PNG</option>
                 </select>
               </div>
               <div class="col-md-2">
