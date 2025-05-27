@@ -113,7 +113,7 @@ if ($currentUser && !empty($currentUser['ProfilePicture']) && file_exists($curre
               <?php endif; ?>
             </a>
             <div class="dropdown-menu dropdown-menu-right navbar-dropdown" aria-labelledby="profileDropdown">
-              <a class="dropdown-item" href="../public/profile.php">
+              <a class="dropdown-item" href="../admin/profile.php">
                 <i class="ti-settings text-primary"></i>
                 Profile
               </a>
