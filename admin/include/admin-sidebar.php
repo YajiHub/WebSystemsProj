@@ -25,6 +25,12 @@
         </a>
       </li>
       <li class="nav-item">
+        <a class="nav-link" href="upload-for-user.php">
+          <i class="icon-upload menu-icon"></i>
+          <span class="menu-title">Upload for User</span>
+        </a>
+      </li>
+      <li class="nav-item">
         <a class="nav-link" href="flagged-documents.php">
           <i class="icon-flag menu-icon"></i>
           <span class="menu-title">Flagged Documents</span>

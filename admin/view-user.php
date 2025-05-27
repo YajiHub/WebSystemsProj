@@ -186,6 +186,9 @@ include 'include/admin-sidebar.php';
           </div>
           <div class="col-12 col-xl-4">
             <div class="justify-content-end d-flex">
+                <a href="upload-for-user.php?user_id=<?php echo $user_id; ?>" class="btn btn-success mr-2">
+                    <i class="ti-upload mr-1"></i> Upload for User
+                </a>
                 <a href="edit-user.php?id=<?php echo $user_id; ?>" class="btn btn-primary mr-2">
                     <i class="ti-pencil mr-1"></i> Edit User
                 </a>
@@ -324,8 +327,13 @@ include 'include/admin-sidebar.php';
             <div class="d-flex justify-content-between align-items-center mb-4">
               <h4 class="card-title mb-0">User Documents (<?php echo $totalDocs; ?> total)</h4>
               
-              <!-- Document filters -->
+              <!-- Action buttons -->
               <div class="d-flex">
+                <a href="upload-for-user.php?user_id=<?php echo $user_id; ?>" class="btn btn-success btn-sm mr-2">
+                  <i class="ti-upload mr-1"></i> Upload Document for User
+                </a>
+                
+                <!-- Document filters -->
                 <div class="mr-2">
                   <select class="form-control form-control-sm" id="document-type-filter">
                     <option value="">All Types</option>

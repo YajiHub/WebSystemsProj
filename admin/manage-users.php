@@ -180,6 +180,9 @@ include 'include/admin-sidebar.php';
                         <a href="view-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-info btn-sm" title="View User">
                           <i class="ti-eye"></i>
                         </a>
+                        <a href="upload-for-user.php?user_id=<?php echo $user['UserID']; ?>" class="btn btn-success btn-sm" title="Upload Document">
+                          <i class="ti-upload"></i>
+                        </a>
                         <a href="edit-user.php?id=<?php echo $user['UserID']; ?>" class="btn btn-primary btn-sm" title="Edit User">
                           <i class="ti-pencil"></i>
                         </a>
