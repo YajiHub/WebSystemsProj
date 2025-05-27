@@ -1,0 +1,159 @@
+<?php
+// File: admin/process-admin-upload.php
+// Enable error reporting for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Log errors to file
+ini_set('log_errors', 1);
+ini_set('error_log', '../admin_upload_errors.log');
+
+// Include session management
+require_once '../public/include/session.php';
+
+// Require admin login
+requireAdmin();
+
+// Check if form was submitted
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Get form data
+    $title = $_POST['documentTitle'] ?? '';
+    $description = $_POST['documentDescription'] ?? '';
+    $tags = $_POST['documentTags'] ?? '';
+    $categoryId = !empty($_POST['categoryId']) ? $_POST['categoryId'] : null;
+    $accessLevel = isset($_POST['accessLevel']) ? intval($_POST['accessLevel']) : $_SESSION['user_access_level'];
+    
+    // Validate form data
+    if (empty($title)) {
+        $_SESSION['error'] = "Please enter a document title.";
+        header("Location: upload.php");
+        exit;
+    }
+    
+    // Check if file was uploaded
+    if (!isset($_FILES['documentFile']) || $_FILES['documentFile']['error'] !== UPLOAD_ERR_OK) {
+        $errorCode = $_FILES['documentFile']['error'] ?? 'No file selected';
+        $errorMessage = "Please select a file to upload. ";
+        
+        // Provide specific error messages based on error code
+        switch ($errorCode) {
+            case UPLOAD_ERR_INI_SIZE:
+                $errorMessage .= "The uploaded file exceeds the upload_max_filesize directive in php.ini.";
+                break;
+            case UPLOAD_ERR_FORM_SIZE:
+                $errorMessage .= "The uploaded file exceeds the MAX_FILE_SIZE directive in the HTML form.";
+                break;
+            case UPLOAD_ERR_PARTIAL:
+                $errorMessage .= "The uploaded file was only partially uploaded.";
+                break;
+            case UPLOAD_ERR_NO_FILE:
+                $errorMessage .= "No file was uploaded.";
+                break;
+            case UPLOAD_ERR_NO_TMP_DIR:
+                $errorMessage .= "Missing a temporary folder.";
+                break;
+            case UPLOAD_ERR_CANT_WRITE:
+                $errorMessage .= "Failed to write file to disk.";
+                break;
+            case UPLOAD_ERR_EXTENSION:
+                $errorMessage .= "File upload stopped by extension.";
+                break;
+            default:
+                $errorMessage .= "Unknown upload error.";
+        }
+        
+        $_SESSION['error'] = $errorMessage;
+        header("Location: upload.php");
+        exit;
+    }
+    
+    // Get file information
+    $file = $_FILES['documentFile'];
+    $fileName = $file['name'];
+    $fileTmpPath = $file['tmp_name'];
+    $fileSize = $file['size'];
+    $fileError = $file['error'];
+    
+    // Get file extension
+    $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+    
+    // Check file extension
+    $allowedExts = ['pdf', 'jpg', 'jpeg', 'png'];
+    if (!in_array($fileExt, $allowedExts)) {
+        $_SESSION['error'] = "Only PDF, JPG, and PNG files are allowed.";
+        header("Location: upload.php");
+        exit;
+    }
+    
+    // Check file size (10MB max)
+    $maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if ($fileSize > $maxSize) {
+        $_SESSION['error'] = "File size exceeds the maximum limit of 10MB.";
+        header("Location: upload.php");
+        exit;
+    }
+    
+    // Create upload directory if it doesn't exist
+    $uploadDir = '../uploads/' . $_SESSION['user_id'] . '/';
+    if (!file_exists($uploadDir)) {
+        if (!mkdir($uploadDir, 0755, true)) {
+            error_log("Failed to create directory: " . $uploadDir);
+            $_SESSION['error'] = "Failed to create upload directory. Please contact the administrator.";
+            header("Location: upload.php");
+            exit;
+        }
+    }
+    
+    // Generate unique filename
+    $newFileName = uniqid() . '.' . $fileExt;
+    $uploadPath = $uploadDir . $newFileName;
+    
+    // Move uploaded file
+    if (move_uploaded_file($fileTmpPath, $uploadPath)) {
+        // Standardize file extension for database
+        if ($fileExt == 'jpeg') {
+            $fileExt = 'jpg';
+        }
+        
+        // Prepare document data
+        $documentData = [
+            'title' => $title,
+            'fileType' => $fileExt,
+            'description' => $description,
+            'categoryId' => $categoryId,
+            'userId' => $_SESSION['user_id'], // Admin uploads for themselves
+            'accessLevel' => $accessLevel
+        ];
+        
+        // Add document to database
+        $documentId = addDocument($conn, $documentData, $uploadPath);
+        
+        if ($documentId) {
+            // Log the upload action
+            $uploadAccessTypeId = 3; // Assuming 3 is the ID for 'Upload' in accesstype table
+            logFileAccess($conn, $_SESSION['user_id'], $documentId, $uploadAccessTypeId);
+            
+            $_SESSION['success'] = "Document uploaded successfully.";
+            header("Location: my-documents.php");
+            exit;
+        } else {
+            // Delete the uploaded file if database insertion failed
+            unlink($uploadPath);
+            
+            $_SESSION['error'] = "Failed to add document to database. Error: " . mysqli_error($conn);
+            header("Location: upload.php");
+            exit;
+        }
+    } else {
+        error_log("Failed to move uploaded file from {$fileTmpPath} to {$uploadPath}");
+        $_SESSION['error'] = "Failed to upload file. Please check file permissions or contact the administrator.";
+        header("Location: upload.php");
+        exit;
+    }
+} else {
+    // If not a POST request, redirect to upload page
+    header("Location: upload.php");
+    exit;
+}
+?>
