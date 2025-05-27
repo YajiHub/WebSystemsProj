@@ -276,76 +276,111 @@ include 'include/admin-sidebar.php';
     </div>
   </div>
 
-<!-- Add this script to the bottom of the page -->
 <script>
 // Wait for the DOM to be fully loaded
 document.addEventListener('DOMContentLoaded', function() {
   console.log("Document ready - initializing document management");
   
   // Flag document functionality
-  $('.flag-document').on('click', function() {
-    console.log("Flag document clicked");
-    var documentId = $(this).data('id');
-    $('#documentId').val(documentId);
-    $('#flagDocumentModal').modal('show');
+  var flagButtons = document.querySelectorAll('.flag-document');
+  flagButtons.forEach(function(button) {
+    button.addEventListener('click', function() {
+      console.log("Flag document clicked");
+      var documentId = this.getAttribute('data-id');
+      document.getElementById('documentId').value = documentId;
+      $('#flagDocumentModal').modal('show');
+    });
   });
   
   // Delete document functionality
-  $('.delete-document').on('click', function() {
-    console.log("Delete document clicked");
-    var documentId = $(this).data('id');
-    $('#deleteDocumentId').val(documentId);
-    $('#deleteDocumentModal').modal('show');
+  var deleteButtons = document.querySelectorAll('.delete-document');
+  deleteButtons.forEach(function(button) {
+    button.addEventListener('click', function() {
+      console.log("Delete document clicked");
+      var documentId = this.getAttribute('data-id');
+      document.getElementById('deleteDocumentId').value = documentId;
+      $('#deleteDocumentModal').modal('show');
+    });
   });
   
   // Unflag document functionality
-  $('.unflag-document').on('click', function() {
-    if (confirm('Are you sure you want to remove the flag from this document?')) {
-      console.log("Unflagging document");
-      var documentId = $(this).data('id');
-      
-      $.ajax({
-        url: 'process-unflag-document.php',
-        type: 'POST',
-        data: { documentId: documentId },
-        success: function(response) {
+  var unflagButtons = document.querySelectorAll('.unflag-document');
+  unflagButtons.forEach(function(button) {
+    button.addEventListener('click', function() {
+      if (confirm('Are you sure you want to remove the flag from this document?')) {
+        console.log("Unflagging document");
+        var documentId = this.getAttribute('data-id');
+        
+        // Create form data
+        var formData = new FormData();
+        formData.append('documentId', documentId);
+        
+        // Send AJAX request using fetch
+        fetch('process-unflag-document.php', {
+          method: 'POST',
+          body: formData
+        })
+        .then(function(response) {
+          return response.text();
+        })
+        .then(function(data) {
+          console.log("Response:", data);
+          // Reload the page to show updated document status
           location.reload();
-        },
-        error: function() {
+        })
+        .catch(function(error) {
+          console.error('Error:', error);
           alert('Error unflagging document. Please try again.');
-        }
-      });
-    }
+        });
+      }
+    });
   });
   
   // Restore document functionality
-  $('.restore-document').on('click', function() {
-    if (confirm('Are you sure you want to restore this document?')) {
-      console.log("Restoring document");
-      var documentId = $(this).data('id');
-      
-      $.ajax({
-        url: 'process-restore-document.php',
-        type: 'POST',
-        data: { documentId: documentId },
-        success: function(response) {
-          location.reload();
-        },
-        error: function() {
+  var restoreButtons = document.querySelectorAll('.restore-document');
+  restoreButtons.forEach(function(button) {
+    button.addEventListener('click', function() {
+      if (confirm('Are you sure you want to restore this document?')) {
+        console.log("Restoring document");
+        var documentId = this.getAttribute('data-id');
+        
+        // Create form data
+        var formData = new FormData();
+        formData.append('documentId', documentId);
+        
+        // Send AJAX request using fetch
+        fetch('process-restore-document.php', {
+          method: 'POST',
+          body: formData
+        })
+        .then(function(response) {
+          return response.text();
+        })
+        .then(function(data) {
+          console.log("Response:", data);
+          if (data.trim() === 'success') {
+            // Reload the page to show updated document status
+            window.location.reload();
+          } else {
+            alert('Error restoring document: ' + data);
+          }
+        })
+        .catch(function(error) {
+          console.error('Error:', error);
           alert('Error restoring document. Please try again.');
-        }
-      });
-    }
+        });
+      }
+    });
   });
 
   // Search and filtering functionality
   function applyFilters() {
     console.log("Applying filters");
-    var fileType = $('#file-type-filter').val().toLowerCase();
-    var accessLevel = $('#access-level-filter').val();
-    var status = $('#status-filter').val();
-    var dateFilter = $('#date-filter').val();
-    var searchText = $('#search-input').val().toLowerCase();
+    var fileType = document.getElementById('file-type-filter').value.toLowerCase();
+    var accessLevel = document.getElementById('access-level-filter').value;
+    var status = document.getElementById('status-filter').value;
+    var dateFilter = document.getElementById('date-filter').value;
+    var searchText = document.getElementById('search-input').value.toLowerCase();
     
     console.log("File type: " + fileType);
     console.log("Access level: " + accessLevel);
@@ -353,15 +388,15 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log("Date filter: " + dateFilter);
     console.log("Search text: " + searchText);
     
-    $('.document-row').each(function() {
-      var row = $(this);
-      var docId = row.find('td:nth-child(1)').text().toLowerCase();
-      var title = row.find('td:nth-child(2)').text().toLowerCase();
-      var type = row.find('td:nth-child(3)').text().toLowerCase();
-      var owner = row.find('td:nth-child(4)').text().toLowerCase();
-      var accessLevelText = row.find('td:nth-child(5)').text();
-      var date = row.find('td:nth-child(6)').text();
-      var statusText = row.find('td:nth-child(7)').text();
+    var rows = document.querySelectorAll('.document-row');
+    rows.forEach(function(row) {
+      var docId = row.cells[0].textContent.toLowerCase();
+      var title = row.cells[1].textContent.toLowerCase();
+      var type = row.cells[2].textContent.toLowerCase();
+      var owner = row.cells[3].textContent.toLowerCase();
+      var accessLevelText = row.cells[4].textContent;
+      var date = row.cells[5].textContent;
+      var statusText = row.cells[6].textContent;
       
       // Check file type filter
       var typeMatch = (fileType === '' || type.indexOf(fileType) > -1);
@@ -405,87 +440,62 @@ document.addEventListener('DOMContentLoaded', function() {
                         date.toLowerCase().indexOf(searchText) > -1 ||
                         statusText.toLowerCase().indexOf(searchText) > -1);
       
-      console.log("Row " + title + ": Type match=" + typeMatch + ", Access match=" + accessLevelMatch + 
-                 ", Status match=" + statusMatch + ", Date match=" + dateMatch + ", Search match=" + searchMatch);
-      
       // Show/hide row based on combined filters
       if (typeMatch && accessLevelMatch && statusMatch && dateMatch && searchMatch) {
-        row.show();
+        row.style.display = '';
       } else {
-        row.hide();
+        row.style.display = 'none';
       }
     });
     
     // Show message if no rows are visible
-    var visibleRows = $('.document-row:visible').length;
+    var visibleRows = document.querySelectorAll('.document-row:not([style*="display: none"])').length;
     console.log("Visible rows: " + visibleRows);
     
-    if (visibleRows === 0 && $('.document-row').length > 0) {
-      // If we already have a "no results" message, don't add another one
-      if ($('#no-results-message').length === 0) {
-        $('#documents-table tbody').append(
-          '<tr id="no-results-message"><td colspan="8" class="text-center">No documents match your search criteria. <button type="button" id="clear-filters-msg" class="btn btn-link p-0">Clear filters</button></td></tr>'
-        );
-        
-        // Add click handler for the "Clear filters" button in message
-        $('#clear-filters-msg').on('click', function() {
-          clearFilters();
-        });
-      }
-    } else {
-      // Remove the "no results" message if there are visible rows
-      $('#no-results-message').remove();
+    // Remove existing no results message if present
+    var existingMessage = document.getElementById('no-results-message');
+    if (existingMessage) {
+      existingMessage.remove();
+    }
+    
+    // Add message if no rows are visible
+    if (visibleRows === 0 && rows.length > 0) {
+      var tbody = document.querySelector('#documents-table tbody');
+      var messageRow = document.createElement('tr');
+      messageRow.id = 'no-results-message';
+      messageRow.innerHTML = '<td colspan="8" class="text-center">No documents match your search criteria. <button type="button" id="clear-filters-msg" class="btn btn-link p-0">Clear filters</button></td>';
+      tbody.appendChild(messageRow);
+      
+      // Add click handler for the "Clear filters" button in message
+      document.getElementById('clear-filters-msg').addEventListener('click', function() {
+        clearFilters();
+      });
     }
   }
   
   // Function to clear all filters
   function clearFilters() {
     console.log("Clearing all filters");
-    $('#file-type-filter').val('');
-    $('#access-level-filter').val('');
-    $('#status-filter').val('');
-    $('#date-filter').val('');
-    $('#search-input').val('');
+    document.getElementById('file-type-filter').value = '';
+    document.getElementById('access-level-filter').value = '';
+    document.getElementById('status-filter').value = '';
+    document.getElementById('date-filter').value = '';
+    document.getElementById('search-input').value = '';
     applyFilters();
   }
   
-  // Add manual event handlers for all filter changes
-  document.getElementById('file-type-filter').addEventListener('change', function() {
-    console.log("File type filter changed");
-    applyFilters();
-  });
-  
-  document.getElementById('access-level-filter').addEventListener('change', function() {
-    console.log("Access level filter changed");
-    applyFilters();
-  });
-  
-  document.getElementById('status-filter').addEventListener('change', function() {
-    console.log("Status filter changed");
-    applyFilters();
-  });
-  
-  document.getElementById('date-filter').addEventListener('change', function() {
-    console.log("Date filter changed");
-    applyFilters();
-  });
-  
-  document.getElementById('search-btn').addEventListener('click', function() {
-    console.log("Search button clicked");
-    applyFilters();
-  });
-  
+  // Add event listeners for filters
+  document.getElementById('file-type-filter').addEventListener('change', applyFilters);
+  document.getElementById('access-level-filter').addEventListener('change', applyFilters);
+  document.getElementById('status-filter').addEventListener('change', applyFilters);
+  document.getElementById('date-filter').addEventListener('change', applyFilters);
+  document.getElementById('search-btn').addEventListener('click', applyFilters);
   document.getElementById('search-input').addEventListener('keyup', function(e) {
     if (e.keyCode === 13) { // Enter key
-      console.log("Enter key pressed in search input");
       applyFilters();
     }
   });
-  
-  document.getElementById('clear-filter-btn').addEventListener('click', function() {
-    console.log("Clear filters button clicked");
-    clearFilters();
-  });
+  document.getElementById('clear-filter-btn').addEventListener('click', clearFilters);
   
   console.log("Document management functionality initialized");
 });
