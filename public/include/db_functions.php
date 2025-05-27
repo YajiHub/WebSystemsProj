@@ -98,13 +98,14 @@ function getDocumentsByUserId($conn, $userId) {
     return $documents;
 }
 
-// Function to get trashed documents by user ID
+// Function to get trashed documents by user ID (only show user-deleted documents, not admin-flagged)
 function getTrashedDocuments($conn, $userId) {
     $userId = (int)$userId;
     $sql = "SELECT d.*, c.CategoryName 
             FROM document d 
             LEFT JOIN category c ON d.CategoryID = c.CategoryID 
             WHERE d.UserID = $userId AND d.IsDeleted = 1 
+            AND (d.FlagReason = 'Deleted by user' OR d.FlagReason IS NULL)
             ORDER BY d.UploadDate DESC";
     
     $result = mysqli_query($conn, $sql);
@@ -139,14 +140,16 @@ function getAllDocuments($conn) {
     return $documents;
 }
 
-// Function to get flagged documents
+// Function to get flagged documents (admin-flagged only, not user-deleted)
 function getFlaggedDocuments($conn) {
     $sql = "SELECT d.*, u.FirstName, u.LastName, c.CategoryName, a.LevelName 
             FROM document d 
             JOIN user u ON d.UserID = u.UserID 
             LEFT JOIN category c ON d.CategoryID = c.CategoryID 
             JOIN accesslevel a ON d.AccessLevel = a.AccessLevelID 
-            WHERE d.IsDeleted = 1 AND d.FlagReason IS NOT NULL 
+            WHERE d.IsDeleted = 1 
+            AND d.FlagReason IS NOT NULL 
+            AND d.FlagReason != 'Deleted by user'
             ORDER BY d.UploadDate DESC";
     $result = mysqli_query($conn, $sql);
     
@@ -285,7 +288,7 @@ function countUsers($conn) {
 
 // Function to count flagged documents
 function countFlaggedDocuments($conn) {
-    $sql = "SELECT COUNT(*) as count FROM document WHERE IsDeleted = 1 AND FlagReason IS NOT NULL";
+    $sql = "SELECT COUNT(*) as count FROM document WHERE IsDeleted = 1 AND FlagReason IS NOT NULL AND FlagReason != 'Deleted by user'";
     $result = mysqli_query($conn, $sql);
     
     if ($result && $row = mysqli_fetch_assoc($result)) {
@@ -441,8 +444,9 @@ function emptyTrash($conn, $userId) {
         mysqli_query($conn, $sql_delete_logs);
     }
     
-    // Now delete all trashed documents from the database
-    $sql = "DELETE FROM document WHERE UserID = $userId AND IsDeleted = 1";
+    // Now delete all trashed documents from the database - only user-deleted ones, not admin-flagged
+    $sql = "DELETE FROM document WHERE UserID = $userId AND IsDeleted = 1 
+           AND (FlagReason = 'Deleted by user' OR FlagReason IS NULL)";
     
     return mysqli_query($conn, $sql);
 }

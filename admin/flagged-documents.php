@@ -56,7 +56,6 @@ include 'include/admin-sidebar.php';
                   <option value="Confidential">Confidential Information</option>
                   <option value="Irrelevant">Irrelevant Content</option>
                   <option value="Other">Other</option>
-                  <option value="Deleted">Deleted by User</option>
                 </select>
               </div>
               <div class="col-md-3">
@@ -219,9 +218,12 @@ include 'include/admin-sidebar.php';
         var title = row.find('td:nth-child(2)').text().toLowerCase();
         var owner = row.find('td:nth-child(4)').text().toLowerCase();
         
-        var reasonMatch = reasonFilter === '' || reason.includes(reasonFilter);
-        var typeMatch = typeFilter === '' || type.includes(typeFilter);
-        var searchMatch = searchText === '' || title.includes(searchText) || owner.includes(searchText);
+        var reasonMatch = !reasonFilter || reason.indexOf(reasonFilter) > -1;
+        var typeMatch = !typeFilter || type.indexOf(typeFilter) > -1;
+        var searchMatch = !searchText || 
+                          title.indexOf(searchText) > -1 || 
+                          owner.indexOf(searchText) > -1 || 
+                          reason.indexOf(searchText) > -1;
         
         if (reasonMatch && typeMatch && searchMatch) {
           row.show();
@@ -229,6 +231,21 @@ include 'include/admin-sidebar.php';
           row.hide();
         }
       });
+      
+      // Show message if no rows are visible
+      var visibleRows = $('#flagged-documents-table tbody tr:visible').length;
+      
+      if (visibleRows === 0) {
+        // If we already have a "no results" message, don't add another one
+        if ($('#no-results-message').length === 0) {
+          $('#flagged-documents-table tbody').append(
+            '<tr id="no-results-message"><td colspan="7" class="text-center">No documents match your search criteria.</td></tr>'
+          );
+        }
+      } else {
+        // Remove the "no results" message if there are visible rows
+        $('#no-results-message').remove();
+      }
     }
   });
 </script>
