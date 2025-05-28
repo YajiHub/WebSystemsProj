@@ -54,7 +54,7 @@ $sql = "SELECT
     COUNT(DocumentID) as TotalCount
 FROM document 
 WHERE IsDeleted = 0 
-AND UploadDate >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+AND UploadDate >= DATE_SUB(NOW(), INTERVAL 2 MONTH)
 GROUP BY DATE_FORMAT(UploadDate, '%Y-%m')
 ORDER BY MonthKey";
 $result = mysqli_query($conn, $sql);
@@ -188,7 +188,7 @@ include 'include/admin-sidebar.php';
         <div class="card">
           <div class="card-body">
             <h4 class="card-title">File Upload Trends</h4>
-            <p class="card-description">Monthly upload statistics for the last 6 months</p>
+            <p class="card-description">Monthly upload statistics for the last 2 months</p>
             <div class="chart-container">
               <canvas id="fileUploadTrendsChart" style="height: 400px;"></canvas>
             </div>
