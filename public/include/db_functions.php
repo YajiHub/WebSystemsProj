@@ -384,9 +384,9 @@ function addDocument($conn, $documentData, $filePath) {
 function flagDocument($conn, $documentId, $reason) {
     $documentId = (int)$documentId;
     $reason = sanitize($conn, $reason);
-    $currentDate = date('Y-m-d H:i:s');
     
-    $sql = "UPDATE document SET IsDeleted = 1, FlagReason = '$reason', DeletedDate = '$currentDate' WHERE DocumentID = $documentId";
+    // Modified to remove the DeletedDate column reference
+    $sql = "UPDATE document SET IsDeleted = 1, FlagReason = '$reason' WHERE DocumentID = $documentId";
     
     return mysqli_query($conn, $sql);
 }
@@ -395,7 +395,7 @@ function flagDocument($conn, $documentId, $reason) {
 function restoreDocument($conn, $documentId) {
     $documentId = (int)$documentId;
     
-    $sql = "UPDATE document SET IsDeleted = 0, FlagReason = NULL, DeletedDate = NULL WHERE DocumentID = $documentId";
+    $sql = "UPDATE document SET IsDeleted = 0, FlagReason = NULL WHERE DocumentID = $documentId";
     
     return mysqli_query($conn, $sql);
 }
