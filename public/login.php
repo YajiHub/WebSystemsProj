@@ -16,12 +16,12 @@ if (isset($_SESSION['user_id'])) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <title>DAMS - Login</title>
+  <title>UpDocs - Login</title>
   <link rel="stylesheet" href="../vendors/feather/feather.css">
   <link rel="stylesheet" href="../vendors/ti-icons/css/themify-icons.css">
   <link rel="stylesheet" href="../vendors/css/vendor.bundle.base.css">
   <link rel="stylesheet" href="../css/vertical-layout-light/style.css">
-  <link rel="shortcut icon" href="../images/favicon.png" />
+  <link rel="shortcut icon" href="../images/updocssmall.png" />
 </head>
 <body>
   <div class="container-scroller">
@@ -31,7 +31,7 @@ if (isset($_SESSION['user_id'])) {
           <div class="col-lg-4 mx-auto">
             <div class="auth-form-light text-left py-5 px-4 px-sm-5">
               <div class="brand-logo text-center">
-                <img src="../images/logo.svg" alt="logo">
+                <img src="../images/updocs.png" alt="logo">
               </div>
               <h4 class="text-center">Document Archive Management System</h4>
               <h6 class="font-weight-light text-center mb-4">Sign in to continue</h6>
