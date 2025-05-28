@@ -1,23 +1,32 @@
 <?php
 require_once '../public/include/session.php';
+
+// Require admin access
 requireAdmin();
 
 // Check if form was submitted
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Get form data
-    $userId = isset($_POST['userId']) ? intval($_POST['userId']) : 0;
+    $userId = $_POST['userId'] ?? '';
     $firstName = $_POST['firstName'] ?? '';
     $middleName = $_POST['middleName'] ?? '';
     $lastName = $_POST['lastName'] ?? '';
     $email = $_POST['email'] ?? '';
-    $username = $_POST['username'] ?? '';
-    $role = $_POST['role'] ?? '';
-    $accessLevel = $_POST['accessLevel'] ?? '';
     $extension = $_POST['extension'] ?? '';
-    $notes = $_POST['notes'] ?? '';
+    $userRole = $_POST['userRole'] ?? '';
+    $accessLevel = $_POST['accessLevel'] ?? '';
+    $resetPassword = isset($_POST['resetPassword']) && $_POST['resetPassword'] == '1';
     $newPassword = $_POST['newPassword'] ?? '';
     
+    // Validate form data
+    if (empty($userId) || empty($firstName) || empty($lastName) || empty($email) || empty($userRole) || empty($accessLevel)) {
+        $_SESSION['error'] = "Please fill in all required fields.";
+        header("Location: edit-user.php?id=$userId");
+        exit;
+    }
+    
     // Validate user ID
+    $userId = (int)$userId;
     if ($userId <= 0) {
         $_SESSION['error'] = "Invalid user ID.";
         header("Location: manage-users.php");
@@ -25,149 +34,63 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
     
     // Check if user exists
-    $checkUserSql = "SELECT * FROM user WHERE UserID = ?";
-    $checkUserStmt = mysqli_prepare($conn, $checkUserSql);
-    mysqli_stmt_bind_param($checkUserStmt, "i", $userId);
-    mysqli_stmt_execute($checkUserStmt);
-    $checkUserResult = mysqli_stmt_get_result($checkUserStmt);
-    
-    if (mysqli_num_rows($checkUserResult) == 0) {
+    $user = getUserById($conn, $userId);
+    if (!$user) {
         $_SESSION['error'] = "User not found.";
         header("Location: manage-users.php");
         exit;
     }
     
-    $currentUser = mysqli_fetch_assoc($checkUserResult);
-    mysqli_stmt_close($checkUserStmt);
-    
-    // Validate required fields
-    if (empty($firstName) || empty($lastName) || empty($email) || empty($username) || empty($role) || empty($accessLevel)) {
-        $_SESSION['error'] = "Please fill in all required fields.";
-        header("Location: edit-user.php?id=" . $userId);
-        exit;
-    }
-    
     // Check if email is already used by another user
-    $checkEmailSql = "SELECT * FROM user WHERE EmailAddress = ? AND UserID != ?";
-    $checkEmailStmt = mysqli_prepare($conn, $checkEmailSql);
-    mysqli_stmt_bind_param($checkEmailStmt, "si", $email, $userId);
-    mysqli_stmt_execute($checkEmailStmt);
-    $checkEmailResult = mysqli_stmt_get_result($checkEmailStmt);
+    $sql = "SELECT * FROM user WHERE EmailAddress = ? AND UserID != ?";
+    $stmt = mysqli_prepare($conn, $sql);
+    mysqli_stmt_bind_param($stmt, "si", $email, $userId);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
     
-    if (mysqli_num_rows($checkEmailResult) > 0) {
+    if (mysqli_num_rows($result) > 0) {
         $_SESSION['error'] = "Email address is already used by another user.";
-        header("Location: edit-user.php?id=" . $userId);
+        header("Location: edit-user.php?id=$userId");
         exit;
     }
-    mysqli_stmt_close($checkEmailStmt);
     
-    // Check if username is already used by another user
-    $checkUsernameSql = "SELECT * FROM user WHERE Username = ? AND UserID != ?";
-    $checkUsernameStmt = mysqli_prepare($conn, $checkUsernameSql);
-    mysqli_stmt_bind_param($checkUsernameStmt, "si", $username, $userId);
-    mysqli_stmt_execute($checkUsernameStmt);
-    $checkUsernameResult = mysqli_stmt_get_result($checkUsernameStmt);
+    // Prepare user data
+    $userData = [
+        'firstName' => $firstName,
+        'middleName' => $middleName,
+        'lastName' => $lastName,
+        'extension' => $extension,
+        'email' => $email,
+        'userRole' => $userRole,
+        'accessLevel' => $accessLevel
+    ];
     
-    if (mysqli_num_rows($checkUsernameResult) > 0) {
-        $_SESSION['error'] = "Username is already taken by another user.";
-        header("Location: edit-user.php?id=" . $userId);
-        exit;
-    }
-    mysqli_stmt_close($checkUsernameStmt);
-    
-    // Prepare update SQL
-    $updateFields = [];
-    $updateParams = [];
-    $updateTypes = "";
-    
-    // Basic user info
-    $updateFields[] = "FirstName = ?";
-    $updateParams[] = $firstName;
-    $updateTypes .= "s";
-    
-    $updateFields[] = "MiddleName = ?";
-    $updateParams[] = $middleName;
-    $updateTypes .= "s";
-    
-    $updateFields[] = "LastName = ?";
-    $updateParams[] = $lastName;
-    $updateTypes .= "s";
-    
-    $updateFields[] = "EmailAddress = ?";
-    $updateParams[] = $email;
-    $updateTypes .= "s";
-    
-    $updateFields[] = "Username = ?";
-    $updateParams[] = $username;
-    $updateTypes .= "s";
-    
-    $updateFields[] = "UserRole = ?";
-    $updateParams[] = $role;
-    $updateTypes .= "s";
-    
-    $updateFields[] = "AccessLevel = ?";
-    $updateParams[] = $accessLevel;
-    $updateTypes .= "i";
-    
-    $updateFields[] = "Extension = ?";
-    $updateParams[] = $extension;
-    $updateTypes .= "s";
-    
-    $updateFields[] = "Notes = ?";
-    $updateParams[] = $notes;
-    $updateTypes .= "s";
-    
-    // Check if password should be updated
-    if (!empty($newPassword)) {
-        // Validate password length
-        if (strlen($newPassword) < 6) {
-            $_SESSION['error'] = "Password must be at least 6 characters long.";
-            header("Location: edit-user.php?id=" . $userId);
-            exit;
+    // Update user information
+    if (updateUser($conn, $userId, $userData)) {
+        // Reset password if requested
+        if ($resetPassword) {
+            if (empty($newPassword)) {
+                $_SESSION['error'] = "Please provide a new password.";
+                header("Location: edit-user.php?id=$userId");
+                exit;
+            }
+            
+            if (updateUserPassword($conn, $userId, $newPassword)) {
+                $_SESSION['success'] = "User information and password updated successfully.";
+            } else {
+                $_SESSION['error'] = "User information updated, but failed to reset password.";
+            }
+        } else {
+            $_SESSION['success'] = "User information updated successfully.";
         }
-        
-        // Hash the new password
-        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-        $updateFields[] = "Password = ?";
-        $updateParams[] = $hashedPassword;
-        $updateTypes .= "s";
-    }
-    
-    // Add user ID to params (for WHERE clause)
-    $updateParams[] = $userId;
-    $updateTypes .= "i";
-    
-    // Construct update SQL
-    $updateSql = "UPDATE user SET " . implode(", ", $updateFields) . " WHERE UserID = ?";
-    
-    // Execute update
-    $updateStmt = mysqli_prepare($conn, $updateSql);
-    mysqli_stmt_bind_param($updateStmt, $updateTypes, ...$updateParams);
-    
-    if (mysqli_stmt_execute($updateStmt)) {
-        $_SESSION['success'] = "User information updated successfully.";
-        
-        // Log the user update
-        error_log("Admin {$_SESSION['user_id']} updated user {$userId} ({$username})");
-        
-        // Update session data if the admin is updating their own account
-        if ($userId == $_SESSION['user_id']) {
-            $_SESSION['user_name'] = $firstName . ' ' . $lastName;
-            $_SESSION['user_email'] = $email;
-            $_SESSION['user_role'] = $role;
-            $_SESSION['user_access_level'] = $accessLevel;
-        }
-        
-        header("Location: view-user.php?id=" . $userId);
     } else {
-        $_SESSION['error'] = "Failed to update user information: " . mysqli_error($conn);
-        header("Location: edit-user.php?id=" . $userId);
+        $_SESSION['error'] = "Failed to update user information.";
     }
     
-    mysqli_stmt_close($updateStmt);
+    header("Location: manage-users.php");
     exit;
 } else {
-    // If not POST request, redirect to users page
+    // If not a POST request, redirect to manage users page
     header("Location: manage-users.php");
     exit;
 }

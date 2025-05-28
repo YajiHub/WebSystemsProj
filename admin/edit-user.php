@@ -1,33 +1,22 @@
 <?php
 require_once '../public/include/session.php';
 
-// Require admin login
+// Require admin access
 requireAdmin();
 
-// Get user ID from URL parameter
-$user_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-
-if ($user_id <= 0) {
-    $_SESSION['error'] = "Invalid user ID.";
+// Check if user ID is provided
+if (!isset($_GET['id']) || empty($_GET['id'])) {
+    $_SESSION['error'] = "No user specified.";
     header("Location: manage-users.php");
     exit;
 }
 
-// Get user details from database
-$sql = "SELECT 
-    u.*,
-    a.LevelName,
-    a.AccessLevelID
-FROM user u
-LEFT JOIN accesslevel a ON u.AccessLevel = a.AccessLevelID
-WHERE u.UserID = ?";
+$userId = (int)$_GET['id'];
 
-$stmt = mysqli_prepare($conn, $sql);
-mysqli_stmt_bind_param($stmt, "i", $user_id);
-mysqli_stmt_execute($stmt);
-$result = mysqli_stmt_get_result($stmt);
-$user = mysqli_fetch_assoc($result);
+// Get user information
+$user = getUserById($conn, $userId);
 
+// Check if user exists
 if (!$user) {
     $_SESSION['error'] = "User not found.";
     header("Location: manage-users.php");
@@ -35,14 +24,7 @@ if (!$user) {
 }
 
 // Get access levels for the form
-$accessLevels = [];
-$sql = "SELECT * FROM accesslevel ORDER BY AccessLevelID";
-$result = mysqli_query($conn, $sql);
-if ($result) {
-    while ($row = mysqli_fetch_assoc($result)) {
-        $accessLevels[] = $row;
-    }
-}
+$accessLevels = getAllAccessLevels($conn);
 
 include 'include/header.php';
 include 'include/admin-sidebar.php';
@@ -56,15 +38,8 @@ include 'include/admin-sidebar.php';
       <div class="col-md-12 grid-margin">
         <div class="row">
           <div class="col-12 col-xl-8 mb-4 mb-xl-0">
-            <h3 class="font-weight-bold">Edit User: <?php echo htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']); ?></h3>
-            <nav aria-label="breadcrumb">
-              <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="dashboard.php">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="manage-users.php">Users</a></li>
-                <li class="breadcrumb-item"><a href="view-user.php?id=<?php echo $user_id; ?>">View User</a></li>
-                <li class="breadcrumb-item active" aria-current="page">Edit User</li>
-              </ol>
-            </nav>
+            <h3 class="font-weight-bold">Edit User</h3>
+            <h6 class="font-weight-normal mb-0">Edit user account information</h6>
           </div>
         </div>
       </div>
@@ -89,114 +64,104 @@ include 'include/admin-sidebar.php';
       <div class="col-md-12 grid-margin stretch-card">
         <div class="card">
           <div class="card-body">
-            <h4 class="card-title">Edit User Information</h4>
-            <p class="card-description">
-              Update user details and permissions
-            </p>
+            <h4 class="card-title">User Information</h4>
             
-            <form id="editUserForm" action="process-edit-user.php" method="post">
-              <input type="hidden" name="userId" value="<?php echo $user_id; ?>">
+            <form action="process-edit-user.php" method="post" class="forms-sample">
+              <input type="hidden" name="userId" value="<?php echo $user['UserID']; ?>">
               
-              <div class="row">
-                <div class="col-md-4">
-                  <div class="form-group">
-                    <label for="firstName">First Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="firstName" name="firstName" value="<?php echo htmlspecialchars($user['FirstName']); ?>" required>
-                  </div>
+              <div class="form-group row">
+                <label for="firstName" class="col-sm-3 col-form-label">First Name</label>
+                <div class="col-sm-9">
+                  <input type="text" class="form-control" id="firstName" name="firstName" 
+                         value="<?php echo htmlspecialchars($user['FirstName']); ?>" required>
                 </div>
-                <div class="col-md-4">
-                  <div class="form-group">
-                    <label for="middleName">Middle Name</label>
-                    <input type="text" class="form-control" id="middleName" name="middleName" value="<?php echo htmlspecialchars($user['MiddleName'] ?? ''); ?>">
-                  </div>
+              </div>
+              
+              <div class="form-group row">
+                <label for="middleName" class="col-sm-3 col-form-label">Middle Name</label>
+                <div class="col-sm-9">
+                  <input type="text" class="form-control" id="middleName" name="middleName" 
+                         value="<?php echo htmlspecialchars($user['MiddleName'] ?? ''); ?>">
                 </div>
-                <div class="col-md-4">
-                  <div class="form-group">
-                    <label for="lastName">Last Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="lastName" name="lastName" value="<?php echo htmlspecialchars($user['LastName']); ?>" required>
+              </div>
+              
+              <div class="form-group row">
+                <label for="lastName" class="col-sm-3 col-form-label">Last Name</label>
+                <div class="col-sm-9">
+                  <input type="text" class="form-control" id="lastName" name="lastName" 
+                         value="<?php echo htmlspecialchars($user['LastName']); ?>" required>
+                </div>
+              </div>
+              
+              <div class="form-group row">
+                <label for="email" class="col-sm-3 col-form-label">Email</label>
+                <div class="col-sm-9">
+                  <input type="email" class="form-control" id="email" name="email" 
+                         value="<?php echo htmlspecialchars($user['EmailAddress']); ?>" required>
+                </div>
+              </div>
+              
+              <div class="form-group row">
+                <label for="extension" class="col-sm-3 col-form-label">Extension</label>
+                <div class="col-sm-9">
+                  <input type="text" class="form-control" id="extension" name="extension" 
+                         value="<?php echo htmlspecialchars($user['Extension'] ?? ''); ?>">
+                </div>
+              </div>
+              
+              <div class="form-group row">
+                <label for="userRole" class="col-sm-3 col-form-label">User Role</label>
+                <div class="col-sm-9">
+                  <select class="form-control" id="userRole" name="userRole" required>
+                    <option value="user" <?php echo ($user['UserRole'] == 'user') ? 'selected' : ''; ?>>User</option>
+                    <option value="admin" <?php echo ($user['UserRole'] == 'admin') ? 'selected' : ''; ?>>Administrator</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div class="form-group row">
+                <label for="accessLevel" class="col-sm-3 col-form-label">Access Level</label>
+                <div class="col-sm-9">
+                  <select class="form-control" id="accessLevel" name="accessLevel" required>
+                    <?php foreach ($accessLevels as $level): ?>
+                      <option value="<?php echo $level['AccessLevelID']; ?>" 
+                              <?php echo ($user['AccessLevel'] == $level['AccessLevelID']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($level['LevelName']); ?>
+                      </option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+              </div>
+              
+              <div class="form-group row">
+                <label for="resetPassword" class="col-sm-3 col-form-label">Reset Password</label>
+                <div class="col-sm-9">
+                  <div class="form-check form-check-flat form-check-primary">
+                    <label class="form-check-label">
+                      <input type="checkbox" class="form-check-input" id="resetPassword" name="resetPassword" value="1" onchange="togglePasswordField()">
+                      Reset user's password
+                    </label>
                   </div>
                 </div>
               </div>
               
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="email">Email <span class="text-danger">*</span></label>
-                    <input type="email" class="form-control" id="email" name="email" value="<?php echo htmlspecialchars($user['EmailAddress']); ?>" required>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="username">Username <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="username" name="username" value="<?php echo htmlspecialchars($user['Username']); ?>" required>
-                  </div>
+              <div class="form-group row" id="newPasswordRow" style="display: none;">
+                <label for="newPassword" class="col-sm-3 col-form-label">New Password</label>
+                <div class="col-sm-9">
+                  <input type="password" class="form-control" id="newPassword" name="newPassword">
                 </div>
               </div>
               
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="newPassword">New Password</label>
-                    <input type="password" class="form-control" id="newPassword" name="newPassword" placeholder="Leave blank to keep current password">
-                    <small class="form-text text-muted">Minimum 6 characters</small>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="confirmPassword">Confirm New Password</label>
-                    <input type="password" class="form-control" id="confirmPassword" name="confirmPassword" placeholder="Leave blank to keep current password">
-                  </div>
+              <div class="form-group row">
+                <label class="col-sm-3 col-form-label">Username</label>
+                <div class="col-sm-9">
+                  <input type="text" class="form-control" value="<?php echo htmlspecialchars($user['Username']); ?>" readonly>
+                  <small class="form-text text-muted">Username cannot be changed.</small>
                 </div>
               </div>
               
-              <div class="row">
-                <div class="col-md-4">
-                  <div class="form-group">
-                    <label for="role">Role <span class="text-danger">*</span></label>
-                    <select class="form-control" id="role" name="role" required>
-                      <option value="user" <?php echo $user['UserRole'] == 'user' ? 'selected' : ''; ?>>Regular User</option>
-                      <option value="admin" <?php echo $user['UserRole'] == 'admin' ? 'selected' : ''; ?>>Administrator</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-4">
-                  <div class="form-group">
-                    <label for="accessLevel">Access Level <span class="text-danger">*</span></label>
-                    <select class="form-control" id="accessLevel" name="accessLevel" required>
-                      <?php foreach ($accessLevels as $level): ?>
-                        <option value="<?php echo $level['AccessLevelID']; ?>" <?php echo $user['AccessLevel'] == $level['AccessLevelID'] ? 'selected' : ''; ?>>
-                          <?php echo htmlspecialchars($level['LevelName']); ?>
-                        </option>
-                      <?php endforeach; ?>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-4">
-                  <div class="form-group">
-                    <label for="extension">Extension</label>
-                    <input type="text" class="form-control" id="extension" name="extension" value="<?php echo htmlspecialchars($user['Extension'] ?? ''); ?>">
-                  </div>
-                </div>
-              </div>
-              
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="extension">Extension</label>
-                    <input type="text" class="form-control" id="extension" name="extension" value="<?php echo htmlspecialchars($user['Extension'] ?? ''); ?>">
-                  </div>
-                </div>
-              </div>
-              
-              <div class="form-group">
-                <label for="notes">Admin Notes</label>
-                <textarea class="form-control" id="notes" name="notes" rows="3"><?php echo htmlspecialchars($user['Notes'] ?? ''); ?></textarea>
-              </div>
-              
-              <div class="mt-4">
-                <button type="submit" class="btn btn-primary mr-2">Save Changes</button>
-                <a href="view-user.php?id=<?php echo $user_id; ?>" class="btn btn-light">Cancel</a>
-              </div>
+              <button type="submit" class="btn btn-primary mr-2">Save Changes</button>
+              <a href="manage-users.php" class="btn btn-light">Cancel</a>
             </form>
           </div>
         </div>
@@ -205,31 +170,21 @@ include 'include/admin-sidebar.php';
   </div>
 
 <script>
-$(document).ready(function() {
-    // Form validation
-    $('#editUserForm').on('submit', function(e) {
-        const newPassword = $('#newPassword').val();
-        const confirmPassword = $('#confirmPassword').val();
-        
-        // Check if passwords match (only if new password is being set)
-        if (newPassword !== '' && newPassword !== confirmPassword) {
-            e.preventDefault();
-            alert('New passwords do not match!');
-            return false;
-        }
-        
-        // Check password length (only if new password is being set)
-        if (newPassword !== '' && newPassword.length < 6) {
-            e.preventDefault();
-            alert('New password must be at least 6 characters long!');
-            return false;
-        }
-        
-        return true;
-    });
-});
+function togglePasswordField() {
+  var resetCheckbox = document.getElementById('resetPassword');
+  var passwordRow = document.getElementById('newPasswordRow');
+  var passwordField = document.getElementById('newPassword');
+  
+  if (resetCheckbox.checked) {
+    passwordRow.style.display = 'flex';
+    passwordField.required = true;
+  } else {
+    passwordRow.style.display = 'none';
+    passwordField.required = false;
+  }
+}
 </script>
 
 <?php
-include 'include/footer.php';
+include '../public/include/footer.php';
 ?>
